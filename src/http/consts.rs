@@ -13,10 +13,11 @@ pub const H_VIA: &str = "via";
 pub const H_CONTENT_LENGTH: &str = "content-length";
 
 pub const T_ENC_CHUNKED: &str = "chunked";
-pub const T_ENC_COMPRESS: &str = "compress";
-pub const T_ENC_IDENTITY: &str = "identity";
-pub const T_ENC_DEFLATE: &str = "deflate";
-pub const T_ENC_GZIP: &str = "gzip";
+pub const _T_ENC_COMPRESS: &str = "compress";
+pub const _T_ENC_IDENTITY: &str = "identity";
+pub const _T_ENC_DEFLATE: &str = "deflate";
+pub const _T_ENC_GZIP: &str = "gzip";
 
 pub const MAX_URI_LENGTH: usize = 8_192;
+pub const MAX_HEADER_LENGTH: usize = 8_192;
 pub const MAX_BODY_LENGTH: usize = 4_194_304;

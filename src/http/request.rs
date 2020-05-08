@@ -8,7 +8,7 @@ use async_std::io::prelude::Read;
 use async_std::prelude::Future;
 use futures::{AsyncBufReadExt, AsyncReadExt};
 
-use crate::http::consts;
+use crate::http::{consts, headers};
 use crate::http::headers::Headers;
 use crate::http::uri::Uri;
 
@@ -154,7 +154,8 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
         loop {
             match with_timeout(self.reader.read_line(&mut buf)).await {
                 Ok(_) if buf == "\r\n" => return Ok(headers),
-                Ok(_) if buf.contains(':') => Self::parse_header(&mut headers, &mut buf)?,
+                Ok(_) if buf.contains(':') && buf.len() < consts::MAX_HEADER_LENGTH =>
+                    Self::parse_header(&mut headers, &mut buf)?,
                 Err(e) => return Err(e),
                 _ => return Err(RequestParseError::InvalidHeader),
             }
@@ -187,7 +188,8 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
             if encodings.iter().any(|encoding| encoding != consts::T_ENC_CHUNKED) {
                 return Err(RequestParseError::UnsupportedTransferEncoding);
             }
-            Ok(Some(self.parse_chunked_body().await?))
+            let (body, _) = self.parse_chunked_body().await?;
+            Ok(Some(body))
         } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
             let length = match length[0].parse::<usize>() {
                 Ok(length) if length > consts::MAX_BODY_LENGTH => return Err(RequestParseError::BodyTooLarge),
@@ -196,15 +198,49 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
             };
             let mut body = vec![0; length];
             with_timeout(self.reader.read_exact(body.as_mut_slice())).await?;
-
             Ok(Some(body))
         } else {
             Ok(None)
         }
     }
 
-    async fn parse_chunked_body(&mut self) -> RequestParseResult<Vec<u8>> {
-        Err(RequestParseError::Unknown) // TODO:
+    async fn parse_chunked_body(&mut self) -> RequestParseResult<(Vec<u8>, Headers)> {
+        let mut body = vec![0u8; 0];
+        let mut line = String::new();
+        let mut chunk_size = 1;
+
+        while chunk_size > 0 {
+            with_timeout(self.reader.read_line(&mut line)).await?;
+            let parts = line[..line.len() - 2].split(';').collect::<Vec<&str>>();
+            if parts.len() > 2 {
+                return Err(RequestParseError::InvalidBody);
+            }
+
+            chunk_size = usize::from_str_radix(parts[0], 16)?;
+            let chunk_ext = parts.get(1).unwrap_or(&"").split('=').collect::<Vec<&str>>();
+            if chunk_ext.len() == 2 {
+                let (chunk_ext_name, chunk_ext_value) = (chunk_ext[0], chunk_ext[1]);
+                if !headers::is_token_string(chunk_ext_name) || !headers::is_token_string(chunk_ext_value) {
+                    return Err(RequestParseError::InvalidBody);
+                }
+            }
+            line.clear();
+
+            if chunk_size > 0 {
+                let mut buf = vec![0; chunk_size];
+                with_timeout(self.reader.read_exact(buf.as_mut_slice())).await?;
+                body.extend_from_slice(&buf);
+
+                with_timeout(self.reader.read_line(&mut line)).await?;
+                if line != "\r\n" {
+                    return Err(RequestParseError::InvalidBody);
+                }
+                line.clear();
+            }
+        }
+
+        let trailers = self.parse_headers().await?;
+        Ok((body, trailers))
     }
 }
 

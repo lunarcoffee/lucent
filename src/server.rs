@@ -26,17 +26,28 @@ pub struct FileServer {
     stop_receiver: Receiver<()>,
 }
 
+pub enum FileServerStartError {
+    FileRootInvalid,
+    TemplateRootInvalid,
+    CannotBindAddress,
+}
+
 impl FileServer {
-    pub async fn new(file_root_str: &str, template_root_str: &str, address: &str) -> Option<Self> {
-        let file_root = Arc::new(PathBuf::from(file_root_str));
-        let template_root = Arc::new(PathBuf::from(template_root_str));
-        let listener = TcpListener::bind(address).await.ok()?;
+    pub async fn new(file_root: &str, template_root: &str, address: &str) -> Result<Self, FileServerStartError> {
+        let file_root = Arc::new(PathBuf::from(file_root));
+        let template_root = Arc::new(PathBuf::from(template_root));
+        let listener = match TcpListener::bind(address).await {
+            Ok(listener) => listener,
+            _ => return Err(FileServerStartError::CannotBindAddress),
+        };
         let (stop_sender, stop_receiver) = sync::channel(1);
 
-        if !file_root.is_dir() || !template_root.is_dir() {
-            None
+        if !file_root.is_dir() {
+            Err(FileServerStartError::FileRootInvalid)
+        } else if !template_root.is_dir() {
+            Err(FileServerStartError::TemplateRootInvalid)
         } else {
-            Some(FileServer {
+            Ok(FileServer {
                 file_root,
                 template_root,
                 listener,
@@ -79,7 +90,7 @@ impl FileServer {
         let mut writer = BufWriter::new(&stream);
 
         let request = match Request::from(&mut reader).await {
-            Err(e) => {
+            Err(_) => {
                 println!("error");
                 return Ok(());
             }

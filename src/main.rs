@@ -1,6 +1,6 @@
 use std::env;
 
-use crate::server::{FileServer, Server};
+use crate::server::{FileServer, FileServerStartError, Server};
 
 mod server;
 mod log;
@@ -18,7 +18,9 @@ async fn main() {
     let address = args.get(3).unwrap_or(fallback_address);
 
     match FileServer::new(&args[1], &args[2], address).await {
-        Some(server) => server.start(),
-        None => log::fatal("File root or template root invalid or not a directory!"),
+        Ok(server) => server.start(),
+        Err(FileServerStartError::FileRootInvalid) => log::fatal("File root invalid or not a directory!"),
+        Err(FileServerStartError::TemplateRootInvalid) => log::fatal("Template root invalid or not a directory!"),
+        _ => log::fatal("Could not bind to that address!"),
     }
 }

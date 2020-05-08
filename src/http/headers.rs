@@ -23,7 +23,7 @@ impl Headers {
     }
 
     pub fn set(&mut self, name: &str, mut value: Vec<String>) -> bool {
-        if !is_valid_header_name(name) || value.iter().any(|v| !is_valid_header_value(v)) {
+        if !is_token_string(name) || value.iter().any(|v| !is_valid_header_value(v)) {
             false
         } else {
             self.headers.entry(Self::normalize_header_name(name)).or_insert(vec![]).append(&mut value);
@@ -52,12 +52,12 @@ impl Debug for Headers {
     }
 }
 
-fn is_valid_header_name(str: &str) -> bool {
-    str.chars().all(|c| is_token_char(c))
-}
-
 fn is_valid_header_value(str: &str) -> bool {
     str.chars().all(|c| is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
+}
+
+fn is_visible_char(ch: char) -> bool {
+    ('!'..='~').contains(&ch)
 }
 
 const TOKEN_CHARS: &str = "!#$%&'*+-.^_`|~";
@@ -66,6 +66,6 @@ fn is_token_char(ch: char) -> bool {
     TOKEN_CHARS.contains(ch) || ch.is_ascii_alphanumeric()
 }
 
-fn is_visible_char(ch: char) -> bool {
-    ('!'..='~').contains(&ch)
+pub fn is_token_string(str: &str) -> bool {
+    str.chars().all(|c| is_token_char(c))
 }
