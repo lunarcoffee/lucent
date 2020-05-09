@@ -1,10 +1,12 @@
 use std::env;
 
-use crate::server::{FileServer, FileServerStartError, Server};
+use crate::server::file_server::{FileServer, FileServerStartError};
+use crate::server::Server;
 
 mod server;
 mod log;
 mod http;
+mod util;
 
 #[async_std::main]
 async fn main() {

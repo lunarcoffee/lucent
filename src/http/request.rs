@@ -1,7 +1,6 @@
 use std::{error, fmt};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::time::Duration;
 
 use async_std::io::{self, BufReader};
 use async_std::io::prelude::Read;
@@ -23,10 +22,37 @@ pub enum Method {
     Trace,
 }
 
+impl Display for Method {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let method = match self {
+            Method::Get => "GET",
+            Method::Head => "HEAD",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Delete => "DELETE",
+            Method::Connect => "CONNECT",
+            Method::Options => "OPTIONS",
+            Method::Trace => "TRACE",
+        };
+        write!(f, "{}", method)
+    }
+}
+
 pub enum HttpVersion {
     Http09,
     Http10,
     Http11,
+}
+
+impl Display for HttpVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let version = match self {
+            HttpVersion::Http09 => "0.9",
+            HttpVersion::Http10 => "1.0",
+            HttpVersion::Http11 => "1.1",
+        };
+        write!(f, "HTTP/{}", version)
+    }
 }
 
 pub struct Request {
@@ -45,33 +71,14 @@ impl Request {
 
 impl Display for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let method = match self.method {
-            Method::Get => "GET",
-            Method::Head => "HEAD",
-            Method::Post => "POST",
-            Method::Put => "PUT",
-            Method::Delete => "DELETE",
-            Method::Connect => "CONNECT",
-            Method::Options => "OPTIONS",
-            Method::Trace => "TRACE",
-        };
-        let http_version = match self.http_version {
-            HttpVersion::Http09 => "HTTP/0.9",
-            HttpVersion::Http10 => "HTTP/1.0",
-            HttpVersion::Http11 => "HTTP/1.1",
-        };
-        write!(f, "{} {} {}", method, self.uri, http_version)
+        write!(f, "{} {} {}", self.method, self.uri, self.http_version)
     }
 }
 
 impl Debug for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)?;
-        let body = self
-            .body
-            .clone()
-            .map(|b| b.iter().map(|b| *b as char).collect::<String>())
-            .unwrap_or(String::new());
+        let body = self.body.clone().map(|b| String::from_utf8_lossy(&*b).to_string()).unwrap_or(String::new());
         write!(f, "\n{:?}\n\n{}", self.headers, body)
     }
 }
@@ -82,6 +89,8 @@ pub enum RequestParseError {
     UriTooLong,
     UnsupportedVersion,
     InvalidHeader,
+    HeaderTooLong,
+    NoHostHeader,
     UnsupportedTransferEncoding,
     InvalidBody,
     BodyTooLarge,
@@ -153,12 +162,18 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
 
         loop {
             match with_timeout(self.reader.read_line(&mut buf)).await {
-                Ok(_) if buf == "\r\n" => return Ok(headers),
-                Ok(_) if buf.contains(':') && buf.len() < consts::MAX_HEADER_LENGTH =>
-                    Self::parse_header(&mut headers, &mut buf)?,
+                Ok(_) if buf == "\r\n" => break,
+                Ok(_) if buf.len() > consts::MAX_HEADER_LENGTH => return Err(RequestParseError::HeaderTooLong),
+                Ok(_) if buf.contains(':') => Self::parse_header(&mut headers, &mut buf)?,
                 Err(e) => return Err(e),
                 _ => return Err(RequestParseError::InvalidHeader),
             }
+        }
+
+        if let Some(_) = headers.get(consts::H_HOST) {
+            Ok(headers)
+        } else {
+            Err(RequestParseError::NoHostHeader)
         }
     }
 
@@ -170,9 +185,9 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
         parts[1] = &parts[1].trim_matches(consts::OPTIONAL_WHITESPACE).trim_end_matches(consts::CRLF);
 
         let header_values = if Headers::is_multi_value(parts[0]) {
-            parts[1].split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE).to_string()).collect()
+            parts[1].split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE)).collect()
         } else {
-            vec![parts[1].to_string()]
+            vec![parts[1]]
         };
 
         if headers.set(&parts[0], header_values) {
@@ -185,7 +200,7 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
 
     async fn parse_body(&mut self, headers: &Headers) -> RequestParseResult<Option<Vec<u8>>> {
         if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
-            if encodings.iter().any(|encoding| encoding != consts::T_ENC_CHUNKED) {
+            if encodings.iter().any(|encoding| encoding != consts::H_T_ENC_CHUNKED) {
                 return Err(RequestParseError::UnsupportedTransferEncoding);
             }
             let (body, _) = self.parse_chunked_body().await?;
@@ -244,10 +259,8 @@ impl<'a, T: Read + Unpin> RequestParser<'a, T> {
     }
 }
 
-const TIMEOUT: Duration = Duration::from_secs(10);
-
 async fn with_timeout<F: Future<Output=io::Result<R>>, R>(fut: F) -> RequestParseResult<R> {
-    match io::timeout(TIMEOUT, fut).await {
+    match io::timeout(consts::MAX_READ_TIMEOUT, fut).await {
         Ok(result) => Ok(result),
         Err(e) if e.kind() == io::ErrorKind::TimedOut => Err(RequestParseError::TimedOut),
         _ => Err(RequestParseError::Unknown)

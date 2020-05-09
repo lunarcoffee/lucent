@@ -1,27 +1,25 @@
 use std::fmt::Display;
 use std::process;
-use std::time::SystemTime;
 
-use chrono::{DateTime, Local};
+use crate::util;
 
 pub fn fatal(msg: impl Display) {
-    eprintln!("[ CRT ] [ {} ] {}", get_time_now(), msg);
+    eprintln!("[ CRT ] [ {} ] {}", get_time_now_formatted(), msg);
     process::exit(1);
 }
 
 pub fn error(msg: impl Display) {
-    eprintln!("[ ERR ] [ {} ] {}", get_time_now(), msg);
+    eprintln!("[ ERR ] [ {} ] {}", get_time_now_formatted(), msg);
 }
 
 pub fn warn(msg: impl Display) {
-    eprintln!("[ WRN ] [ {} ] {}", get_time_now(), msg);
+    eprintln!("[ WRN ] [ {} ] {}", get_time_now_formatted(), msg);
 }
 
 pub fn info(msg: impl Display) {
-    println!("[ INF ] [ {} ] {}", get_time_now(), msg);
+    println!("[ INF ] [ {} ] {}", get_time_now_formatted(), msg);
 }
 
-fn get_time_now() -> impl Display {
-    let now: DateTime<Local> = SystemTime::now().into();
-    now.format("%d/%m/%Y %r")
+fn get_time_now_formatted() -> impl Display {
+    util::get_time_now().format("%d/%m/%Y %r")
 }

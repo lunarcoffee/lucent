@@ -22,13 +22,27 @@ impl Headers {
         self.headers.get(&Self::normalize_header_name(name))
     }
 
-    pub fn set(&mut self, name: &str, mut value: Vec<String>) -> bool {
-        if !is_token_string(name) || value.iter().any(|v| !is_valid_header_value(v)) {
+    pub fn set_one(&mut self, name: &str, value: &str) -> bool {
+        if !is_token_string(name) || !is_valid_header_value(value) {
             false
         } else {
-            self.headers.entry(Self::normalize_header_name(name)).or_insert(vec![]).append(&mut value);
+            self.headers.insert(Self::normalize_header_name(name), vec![value.to_string()]);
             true
         }
+    }
+
+    pub fn set(&mut self, name: &str, values: Vec<&str>) -> bool {
+        if !is_token_string(name) || values.iter().any(|v| !is_valid_header_value(v)) {
+            false
+        } else {
+            let values = values.iter().map(|s| s.to_string()).collect();
+            self.headers.insert(Self::normalize_header_name(name), values);
+            true
+        }
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.headers.remove(name);
     }
 
     pub fn is_multi_value(name: &str) -> bool {
