@@ -17,5 +17,5 @@ pub fn info(msg: impl Display) {
 }
 
 fn get_time_now_formatted() -> impl Display {
-    util::get_time_now().format("%d/%m/%Y %r")
+    util::get_time_local().format("%d/%m/%Y %r")
 }

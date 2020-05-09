@@ -22,6 +22,10 @@ impl Headers {
         self.headers.get(&Self::normalize_header_name(name))
     }
 
+    pub fn contains(&self, name: &str) -> bool {
+        matches!(self.get(name), Some(_))
+    }
+
     pub fn set_one(&mut self, name: &str, value: &str) -> bool {
         if !is_token_string(name) || !is_valid_header_value(value) {
             false
@@ -60,7 +64,7 @@ impl Debug for Headers {
             .headers
             .iter()
             .map(|h| format!("{}: {}", h.0, h.1.join(", ")))
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join("\n");
         write!(f, "{}", headers_joined)
     }

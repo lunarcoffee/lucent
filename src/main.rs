@@ -10,7 +10,7 @@ mod util;
 
 #[async_std::main]
 async fn main() {
-    let args = env::args().collect::<Vec<String>>();
+    let args = env::args().collect::<Vec<_>>();
     if args.len() != 3 && args.len() != 4 {
         println!("usage: {} <file root> <template root> [host]", args[0]);
         return;

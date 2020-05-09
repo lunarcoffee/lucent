@@ -2,7 +2,7 @@ use std::{error, fmt};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
-use async_std::io::{self, BufRead, BufReader};
+use async_std::io::{self, BufRead, BufReader, Write, BufWriter};
 use async_std::io::prelude::Read;
 use async_std::prelude::Future;
 use futures::{AsyncBufReadExt, AsyncReadExt};
@@ -10,6 +10,7 @@ use futures::{AsyncBufReadExt, AsyncReadExt};
 use crate::http::{consts, headers};
 use crate::http::headers::Headers;
 use crate::http::uri::Uri;
+use crate::http::response::ResponseBuilder;
 
 pub enum Method {
     Get,
@@ -64,8 +65,11 @@ pub struct Request {
 }
 
 impl Request {
-    pub async fn from<R: Read + Unpin>(reader: &mut R) -> RequestParseResult<Self> {
-        RequestParser { reader: BufReader::new(reader) }.parse().await
+    pub async fn from<R: Read + Unpin, W: Write + Unpin>(reader: &mut R, writer: &mut W) -> RequestParseResult<Self> {
+        RequestParser {
+            reader: BufReader::new(reader),
+            writer: BufWriter::new(writer),
+        }.parse().await
     }
 }
 
@@ -107,11 +111,12 @@ impl<T: error::Error> From<T> for RequestParseError {
 
 pub type RequestParseResult<T> = Result<T, RequestParseError>;
 
-struct RequestParser<R: BufRead + Unpin> {
+struct RequestParser<R: BufRead + Unpin, W: Write + Unpin> {
     reader: R,
+    writer: W,
 }
 
-impl<R: BufRead + Unpin> RequestParser<R> {
+impl<R: BufRead + Unpin, W: Write + Unpin> RequestParser<R, W> {
     async fn parse(&mut self) -> RequestParseResult<Request> {
         let (method, uri, http_version) = self.parse_request_line().await?;
         let headers = self.parse_headers().await?;
@@ -161,37 +166,39 @@ impl<R: BufRead + Unpin> RequestParser<R> {
         let mut buf = String::new();
 
         loop {
+            buf.clear();
             match with_timeout(self.reader.read_line(&mut buf)).await {
                 Ok(_) if buf == "\r\n" => break,
                 Ok(_) if buf.len() > consts::MAX_HEADER_LENGTH => return Err(RequestParseError::HeaderTooLong),
-                Ok(_) if buf.contains(':') => Self::parse_header(&mut headers, &mut buf)?,
+                Ok(_) if buf.contains(':') => self.parse_header(&mut headers, &mut buf).await?,
                 Err(e) => return Err(e),
                 _ => return Err(RequestParseError::InvalidHeader),
             }
         }
 
-        if let Some(_) = headers.get(consts::H_HOST) {
+        if headers.contains(consts::H_HOST) {
             Ok(headers)
         } else {
             Err(RequestParseError::NoHostHeader)
         }
     }
 
-    fn parse_header(headers: &mut Headers, buf: &mut String) -> RequestParseResult<()> {
-        let mut parts = buf.splitn(2, ':').collect::<Vec<&str>>();
-        let header_name = &parts[0].to_ascii_lowercase();
-
-        parts[0] = header_name;
-        parts[1] = &parts[1].trim_matches(consts::OPTIONAL_WHITESPACE).trim_end_matches(consts::CRLF);
+    async fn parse_header(&mut self, headers: &mut Headers, buf: &mut String) -> RequestParseResult<()> {
+        let parts = buf.splitn(2, ':').collect::<Vec<_>>();
+        let header_name = parts[0].to_ascii_lowercase();
+        let header_value = parts[1].trim_end_matches(consts::CRLF).trim_matches(consts::OPTIONAL_WHITESPACE);
 
         let header_values = if Headers::is_multi_value(parts[0]) {
-            parts[1].split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE)).collect()
+            header_value.split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE)).collect()
         } else {
-            vec![parts[1]]
+            vec![header_value]
         };
 
         if headers.set(&parts[0], header_values) {
-            buf.clear();
+            if (header_name.as_str(), header_value) == (consts::H_EXPECT, consts::H_EXPECT_CONTINUE) {
+                // TODO: test this
+                ResponseBuilder::new().with_status(consts::SC_CONTINUE).build().respond(&mut self.writer).await?;
+            }
             Ok(())
         } else {
             Err(RequestParseError::InvalidHeader)
@@ -206,7 +213,7 @@ impl<R: BufRead + Unpin> RequestParser<R> {
             let (body, _) = self.parse_chunked_body().await?;
             Ok(Some(body))
         } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
-            let length = match length[0].parse::<usize>() {
+            let length = match length[0].parse() {
                 Ok(length) if length > consts::MAX_BODY_LENGTH => return Err(RequestParseError::BodyTooLarge),
                 Ok(length) => length,
                 _ => return Err(RequestParseError::InvalidBody),
@@ -226,13 +233,13 @@ impl<R: BufRead + Unpin> RequestParser<R> {
 
         while chunk_size > 0 {
             with_timeout(self.reader.read_line(&mut line)).await?;
-            let parts = line[..line.len() - 2].split(';').collect::<Vec<&str>>();
+            let parts = line[..line.len() - 2].split(';').collect::<Vec<_>>();
             if parts.len() > 2 {
                 return Err(RequestParseError::InvalidBody);
             }
 
             chunk_size = usize::from_str_radix(parts[0], 16)?;
-            let chunk_ext = parts.get(1).unwrap_or(&"").split('=').collect::<Vec<&str>>();
+            let chunk_ext = parts.get(1).unwrap_or(&"").split('=').collect::<Vec<_>>();
             if chunk_ext.len() == 2 {
                 let (chunk_ext_name, chunk_ext_value) = (chunk_ext[0], chunk_ext[1]);
                 if !headers::is_token_string(chunk_ext_name) || !headers::is_token_string(chunk_ext_value) {

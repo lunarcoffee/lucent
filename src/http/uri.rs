@@ -32,7 +32,7 @@ impl Display for AbsolutePath {
                 let joined = query
                     .iter()
                     .map(|(name, value)| format!("{}={}", name, value))
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<_>>()
                     .join("&");
                 format!("?{}", joined)
             }
@@ -118,7 +118,7 @@ impl UriParser<'_> {
             None
         };
 
-        let host_and_port = authority_part.split(':').collect::<Vec<&str>>();
+        let host_and_port = authority_part.split(':').collect::<Vec<_>>();
         if host_and_port.is_empty() || host_and_port.len() > 2 {
             return Err(RequestParseError::InvalidUri);
         }
@@ -128,7 +128,7 @@ impl UriParser<'_> {
             return Err(RequestParseError::InvalidUri);
         }
 
-        let port = match host_and_port.get(1).map(|s| s.parse::<u16>()) {
+        let port = match host_and_port.get(1).map(|s| s.parse()) {
             Some(Ok(port)) => Some(port),
             Some(Err(_)) => return Err(RequestParseError::InvalidUri),
             _ => None,
@@ -153,7 +153,7 @@ impl UriParser<'_> {
             raw_path = &raw_path[..raw_path.len() - 1]
         }
 
-        let mut path = raw_path.split('/').map(|segment| segment.to_string()).collect::<Vec<String>>();
+        let mut path = raw_path.split('/').map(|segment| segment.to_string()).collect::<Vec<_>>();
         if !path[0].is_empty() {
             return Err(RequestParseError::InvalidUri);
         }

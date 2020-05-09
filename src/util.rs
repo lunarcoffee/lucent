@@ -1,10 +1,14 @@
 use std::time::SystemTime;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Local};
 
 use crate::http::consts;
 
-pub fn get_time_now() -> DateTime<Utc> {
+pub fn get_time_utc() -> DateTime<Utc> {
+    SystemTime::now().into()
+}
+
+pub fn get_time_local() -> DateTime<Local> {
     SystemTime::now().into()
 }
 

@@ -11,7 +11,7 @@ pub const MAX_BODY_LENGTH: usize = 4_194_304;
 pub const MAX_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
-pub const _SC_CONTINUE: i32 = 100;
+pub const SC_CONTINUE: i32 = 100;
 pub const _SC_SWITCHING_PROTOCOLS: i32 = 101;
 pub const _SC_PROCESSING: i32 = 102;
 pub const SC_OK: i32 = 200;
@@ -86,12 +86,19 @@ pub const H_CONTENT_TYPE: &str = "content-type";
 pub const H_HOST: &str = "host";
 pub const H_SERVER: &str = "server";
 pub const H_DATE: &str = "date";
+pub const H_CONNECTION: &str = "connection";
+pub const H_EXPECT: &str = "expect";
 
 pub const H_T_ENC_CHUNKED: &str = "chunked";
 pub const _H_T_ENC_COMPRESS: &str = "compress";
 pub const _H_T_ENC_IDENTITY: &str = "identity";
 pub const _H_T_ENC_DEFLATE: &str = "deflate";
 pub const _H_T_ENC_GZIP: &str = "gzip";
+
+pub const H_CONN_KEEP_ALIVE: &str = "keep-alive";
+pub const H_CONN_CLOSE: &str = "close";
+
+pub const H_EXPECT_CONTINUE: &str = "100-continue";
 
 pub const H_MEDIA_AAC: &str = "audio/aac";
 pub const H_MEDIA_AVI: &str = "video/x-msvideo";
