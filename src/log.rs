@@ -8,10 +8,6 @@ pub fn fatal(msg: impl Display) {
     process::exit(1);
 }
 
-pub fn error(msg: impl Display) {
-    eprintln!("[ ERR ] [ {} ] {}", get_time_now_formatted(), msg);
-}
-
 pub fn warn(msg: impl Display) {
     eprintln!("[ WRN ] [ {} ] {}", get_time_now_formatted(), msg);
 }

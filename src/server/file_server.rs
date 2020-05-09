@@ -10,10 +10,10 @@ use async_std::task;
 use futures::{FutureExt, select};
 use futures::io::ErrorKind;
 
+use crate::{log, util};
 use crate::http::consts;
-use crate::http::request::{Request, RequestParseError};
+use crate::http::request::{Method, Request, RequestParseError};
 use crate::http::response::ResponseBuilder;
-use crate::log;
 use crate::server::Server;
 
 pub enum FileServerStartError {
@@ -31,7 +31,7 @@ pub struct FileServer {
     stop_receiver: Receiver<()>,
 }
 
-type HandleResult = Result<(), Box<dyn error::Error>>;
+type HandleResult<T> = Result<T, Box<dyn error::Error>>;
 
 impl FileServer {
     pub async fn new(file_root: &str, template_root: &str, address: &str) -> Result<Self, FileServerStartError> {
@@ -82,14 +82,42 @@ impl FileServer {
         Ok(())
     }
 
-    async fn handle_incoming(stream: TcpStream, file_root: String, template_root: String) -> HandleResult {
-        static GENERIC_ERROR: fn() -> HandleResult = || { Err(Box::new(io::Error::from(ErrorKind::Other))) };
-
+    async fn handle_incoming(stream: TcpStream, file_root: String, template_root: String) -> HandleResult<()> {
         let mut reader = BufReader::new(&stream);
         let mut writer = BufWriter::new(&stream);
 
         let response = ResponseBuilder::new();
-        let request = match Request::from(&mut reader).await {
+        let request = Self::handle_request_parse(&mut reader, &mut writer, &template_root).await?;
+        log::info(&request);
+
+        let target_string = &request.uri.to_string();
+        let target = if target_string == "/" { "/index.html" } else { target_string };
+        let file = match fs::read(format!("{}{}", file_root, target)) {
+            Ok(bytes) => bytes,
+            _ => {
+                Self::handle_error(&mut writer, &template_root, consts::SC_NOT_FOUND).await?;
+                return generic_error();
+            }
+        };
+
+        let file_ext = Path::new(target).extension().map(|s| s.to_str().unwrap_or("")).unwrap_or("");
+        let media_type = util::media_type_by_ext(file_ext);
+        let body = if matches!(request.method, Method::Head) { vec![] } else { file };
+
+        response
+            .with_body(body, media_type)
+            .with_header("connection", "close")
+            .build()
+            .respond(&mut writer)
+            .await?;
+        Ok(())
+    }
+
+    async fn handle_request_parse<R, W>(reader: &mut R, writer: &mut W, template_root: &str) -> HandleResult<Request>
+        where R: Read + Unpin,
+              W: Write + Unpin
+    {
+        let request = match Request::from(reader).await {
             Ok(request) => request,
             Err(e) => {
                 let status = match e {
@@ -102,35 +130,24 @@ impl FileServer {
                     _ => consts::SC_BAD_REQUEST,
                 };
                 log::info(format!("({}) (request did not parse)", status));
-                Self::handle_error(&mut writer, &template_root, status).await?;
-                return GENERIC_ERROR();
-            }
-        };
-        log::info(&request);
-
-        let target_string = &request.uri.to_string();
-        let target = if target_string == "/" { "/index.html" } else { target_string };
-        let file = match fs::read(format!("{}{}", file_root, target)) {
-            Ok(bytes) => bytes,
-            _ => {
-                Self::handle_error(&mut writer, &template_root, consts::SC_NOT_FOUND).await?;
-                return GENERIC_ERROR();
+                Self::handle_error(writer, &template_root, status).await?;
+                return generic_error();
             }
         };
 
-        response
-            .with_body(file, consts::H_MEDIA_HTML)
-            .with_header("connection", "close")
-            .build()
-            .respond(&mut writer)
-            .await?;
-        Ok(())
+        if !matches!(&request.method, Method::Get | Method::Head) {
+            Self::handle_error(writer, template_root, consts::SC_METHOD_NOT_ALLOWED).await?;
+            log::info(format!("({}) (invalid request method)", consts::SC_METHOD_NOT_ALLOWED));
+            generic_error()
+        } else {
+            Ok(request)
+        }
     }
 
-    async fn handle_error(writer: &mut (impl WriteExt + Unpin), template_root: &str, status: i32) -> HandleResult {
+    async fn handle_error(writer: &mut (impl Write + Unpin), template_root: &str, status: i32) -> HandleResult<()> {
         let error_file = format!("{}/error.html", template_root);
         let body = if !Path::new(&error_file).is_file().await {
-            return Err(Box::new(io::Error::from(ErrorKind::Other)));
+            return generic_error();
         } else {
             let status = status.to_string();
             fs::read_to_string(&error_file)?
@@ -141,6 +158,7 @@ impl FileServer {
 
         ResponseBuilder::new()
             .with_status(status)
+            .with_header_multi(consts::H_ACCEPT, vec![&Method::Get.to_string(), &Method::Head.to_string()])
             .with_body(body, consts::H_MEDIA_HTML)
             .build()
             .respond(writer)
@@ -159,4 +177,8 @@ impl Server for FileServer {
     fn stop(&self) {
         task::block_on(self.stop_sender.send(()));
     }
+}
+
+fn generic_error<T>() -> HandleResult<T> {
+    Err(Box::new(io::Error::from(ErrorKind::Other)))
 }

@@ -7,6 +7,7 @@ use crate::http::consts;
 use crate::http::headers::Headers;
 use crate::http::request::HttpVersion;
 use crate::util;
+use async_std::io::Write;
 
 pub struct Response {
     pub version: HttpVersion,
@@ -16,7 +17,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn respond(self, writer: &mut (impl WriteExt + Unpin)) -> io::Result<()> {
+    pub async fn respond(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
         io::timeout(consts::MAX_WRITE_TIMEOUT, async {
             writer.write(&self.into_bytes()).await?;
             writer.flush().await

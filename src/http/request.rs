@@ -2,7 +2,7 @@ use std::{error, fmt};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
-use async_std::io::{self, BufReader};
+use async_std::io::{self, BufRead, BufReader};
 use async_std::io::prelude::Read;
 use async_std::prelude::Future;
 use futures::{AsyncBufReadExt, AsyncReadExt};
@@ -64,8 +64,8 @@ pub struct Request {
 }
 
 impl Request {
-    pub async fn from<T: Read + Unpin>(reader: &mut BufReader<T>) -> RequestParseResult<Self> {
-        RequestParser { reader }.parse().await
+    pub async fn from<R: Read + Unpin>(reader: &mut R) -> RequestParseResult<Self> {
+        RequestParser { reader: BufReader::new(reader) }.parse().await
     }
 }
 
@@ -107,11 +107,11 @@ impl<T: error::Error> From<T> for RequestParseError {
 
 pub type RequestParseResult<T> = Result<T, RequestParseError>;
 
-struct RequestParser<'a, T: Read + Unpin> {
-    reader: &'a mut BufReader<T>,
+struct RequestParser<R: BufRead + Unpin> {
+    reader: R,
 }
 
-impl<'a, T: Read + Unpin> RequestParser<'a, T> {
+impl<R: BufRead + Unpin> RequestParser<R> {
     async fn parse(&mut self) -> RequestParseResult<Request> {
         let (method, uri, http_version) = self.parse_request_line().await?;
         let headers = self.parse_headers().await?;
