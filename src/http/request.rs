@@ -13,7 +13,7 @@ use crate::http::uri::Uri;
 use crate::http::response::ResponseBuilder;
 use crate::http::response::Status;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Method {
     Get,
     Head,
@@ -41,7 +41,7 @@ impl Display for Method {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum HttpVersion {
     Http09,
     Http10,
@@ -105,6 +105,7 @@ pub enum RequestParseError {
     BodyTooLarge,
 
     TimedOut,
+    EndOfStream,
     Unknown,
 }
 
@@ -134,6 +135,9 @@ impl<R: BufRead + Unpin, W: Write + Unpin> RequestParser<R, W> {
         let mut buf = Vec::with_capacity(8);
 
         with_timeout(self.reader.read_until(b' ', &mut buf)).await?;
+        if buf.is_empty() {
+            return Err(RequestParseError::EndOfStream);
+        }
         let method = match buf.as_slice() {
             b"GET " => Method::Get,
             b"HEAD " => Method::Head,

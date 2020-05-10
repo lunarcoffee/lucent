@@ -78,9 +78,9 @@ impl UriParser<'_> {
     fn parse(&mut self) -> RequestParseResult<Uri> {
         if self.raw.len() > consts::MAX_URI_LENGTH {
             Err(RequestParseError::UriTooLong)
-        } else if self.raw == "*" && matches!(self.method, Method::Options) {
+        } else if self.raw == "*" && *self.method == Method::Options {
             Ok(Uri::AsteriskForm)
-        } else if matches!(self.method, Method::Connect) {
+        } else if *self.method == Method::Connect {
             let authority = self.parse_authority(false)?;
             Ok(Uri::AuthorityForm { authority })
         } else if self.raw.starts_with('/') {

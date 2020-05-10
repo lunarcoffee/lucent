@@ -18,7 +18,6 @@ use crate::http::response::ResponseBuilder;
 use crate::server::Server;
 use crate::server::conditionals::{ConditionalChecker, ConditionalCheckResult, ConditionalInformation};
 use async_std::fs::File;
-use crate::http::headers::Headers;
 use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -89,35 +88,35 @@ impl FileServer {
     async fn handle_incoming(stream: TcpStream, file_root: String, template_root: String) -> HandleResult<()> {
         let mut reader = BufReader::new(&stream);
         let mut writer = BufWriter::new(&stream);
+        let mut close_intended = false;
 
-        loop {
+        while !close_intended {
             let request = Self::handle_request_parse(&mut reader, &mut writer, &template_root).await?;
-            log::info(format!("{} {}", request.method, request.uri));
+            close_intended = client_intends_to_close(&request);
 
             let target_string = &request.uri.to_string();
             let target = format!("{}{}", file_root, if target_string == "/" { "/index.html" } else { target_string });
             let file = match File::open(&target).await {
                 Ok(file) => file,
                 _ => {
-                    Self::handle_error(&mut writer, &template_root, Status::NotFound, false).await?;
+                    Self::handle_error(&mut writer, &template_root, Status::NotFound, Some(&request)).await?;
                     return Self::generic_error();
                 }
             };
 
-            let last_modified = file.metadata().await?.modified()?.into();
-            let info = ConditionalInformation {
-                etag: Some(Self::generate_etag(&last_modified)),
-                last_modified: Some(last_modified),
-            };
-            if let Err(_) = Self::handle_conditionals(&mut writer, &template_root, &info, &request.headers).await {
+            let last_modified = Some(file.metadata().await?.modified()?.into());
+            let etag = Some(Self::generate_etag(&last_modified.unwrap()));
+            let info = ConditionalInformation { etag, last_modified };
+            if let Err(_) = Self::handle_conditionals(&mut writer, &info, &template_root, &request).await {
                 continue;
             }
 
             let body = fs::read(&target).await?;
             let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
             let media_type = util::media_type_by_ext(file_ext);
-            let body = if matches!(request.method, Method::Head) { vec![] } else { body };
+            let body = if request.method == Method::Head { vec![] } else { body };
 
+            log::info(format!("({}) {} {}", Status::Ok, request.method, request.uri));
             ResponseBuilder::new()
                 .with_header(consts::H_ETAG, &info.etag.unwrap())
                 .with_header(consts::H_LAST_MODIFIED, &util::format_time_imf(&info.last_modified.unwrap().into()))
@@ -125,10 +124,6 @@ impl FileServer {
                 .build()
                 .respond(&mut writer)
                 .await?;
-
-            if client_intends_to_close(&request) {
-                break;
-            }
         }
         Ok(())
     }
@@ -147,16 +142,17 @@ impl FileServer {
                     RequestParseError::InvalidExpectHeader => Status::ExpectationFailed,
                     RequestParseError::UnsupportedTransferEncoding => Status::NotImplemented,
                     RequestParseError::BodyTooLarge => Status::PayloadTooLarge,
+                    RequestParseError::EndOfStream => return Self::generic_error(),
                     RequestParseError::TimedOut => Status::RequestTimeout,
                     _ => Status::BadRequest,
                 };
-                Self::handle_error(writer, &template_root, status, true).await?;
+                Self::handle_error(writer, &template_root, status, None).await?;
                 return Self::generic_error();
             }
         };
 
-        if !matches!(&request.method, Method::Get | Method::Head) {
-            Self::handle_error(writer, template_root, Status::MethodNotAllowed, false).await?;
+        if request.method != Method::Get && request.method != Method::Head {
+            Self::handle_error(writer, template_root, Status::MethodNotAllowed, Some(&request)).await?;
             Self::generic_error()
         } else {
             Ok(request)
@@ -165,28 +161,35 @@ impl FileServer {
 
     async fn handle_conditionals(
         writer: &mut (impl Write + Unpin),
-        template_root: &String,
         info: &ConditionalInformation,
-        headers: &Headers,
+        template_root: &String,
+        request: &Request,
     ) -> HandleResult<()> {
-        match ConditionalChecker::new(info, headers).check() {
+        match ConditionalChecker::new(info, &request.headers).check() {
             ConditionalCheckResult::FailPositive => {
-                Self::handle_error(writer, &template_root, Status::PreconditionFailed, false).await?;
+                Self::handle_error(writer, template_root, Status::PreconditionFailed, Some(request)).await?;
                 return Self::generic_error();
             }
             ConditionalCheckResult::FailNegative => {
-                Self::handle_error(writer, &template_root, Status::NotModified, false).await?;
+                Self::handle_status(writer, request, Status::NotModified).await?;
                 return Self::generic_error();
             }
             _ => Ok(())
         }
     }
 
-    async fn handle_error<W>(writer: &mut W, template_root: &str, status: Status, close: bool) -> HandleResult<()>
-        where W: Write + Unpin
-    {
+    async fn handle_error(
+        writer: &mut (impl Write + Unpin),
+        template_root: &str,
+        status: Status,
+        request: Option<&Request>,
+    ) -> HandleResult<()> {
         if status != Status::RequestTimeout {
-            log::warn(format!("({})", status));
+            if let Some(request) = request {
+                log::info(format!("({}) {} {}", status, request.method, request.uri));
+            } else {
+                log::info(format!("({})", status));
+            }
         }
 
         let error_file = format!("{}/error.html", template_root);
@@ -201,19 +204,22 @@ impl FileServer {
                 .into_bytes()
         };
 
-        let response = if close {
-            ResponseBuilder::new().with_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
-        } else {
-            ResponseBuilder::new()
-        };
-
-        response
+        ResponseBuilder::new()
             .with_status(status)
+            .with_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
             .with_header_multi(consts::H_ACCEPT, vec![&Method::Get.to_string(), &Method::Head.to_string()])
             .with_body(body, consts::H_MEDIA_HTML)
             .build()
             .respond(writer)
             .await?;
+        Ok(())
+    }
+
+    async fn handle_status<W>(writer: &mut W, request: &Request, status: Status) -> HandleResult<()>
+        where W: Write + Unpin
+    {
+        log::info(format!("({}) {} {}", status, request.method, request.uri));
+        ResponseBuilder::new().with_status(status).build().respond(writer).await?;
         Ok(())
     }
 
@@ -236,7 +242,7 @@ impl FileServer {
 impl Server for FileServer {
     fn start(&self) {
         if let Err(e) = task::block_on(self.main_loop()) {
-            log::fatal(format!("Unexpected fatal error during normal operation: {}", e));
+            log::warn(format!("Unexpected error during normal operation: {}", e));
         }
     }
 
@@ -247,9 +253,9 @@ impl Server for FileServer {
 
 fn client_intends_to_close(request: &Request) -> bool {
     if let Some(conn_options) = request.headers.get(consts::H_CONNECTION) {
-        !(matches!(request.http_version, HttpVersion::Http10) && conn_options[0] == consts::H_CONN_KEEP_ALIVE) ||
+        request.http_version != HttpVersion::Http11 || conn_options[0] != consts::H_CONN_KEEP_ALIVE ||
             conn_options[0] == consts::H_CONN_CLOSE
     } else {
-        !matches!(&request.http_version, HttpVersion::Http11)
+        request.http_version != HttpVersion::Http11
     }
 }
