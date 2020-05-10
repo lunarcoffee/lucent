@@ -2,18 +2,18 @@ use chrono::{DateTime, Utc};
 use crate::http::headers::Headers;
 use crate::http::consts;
 use crate::util;
+use crate::http::response::Status;
+use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 
 pub struct ConditionalInformation {
     pub etag: Option<String>,
     pub last_modified: Option<DateTime<Utc>>,
 }
 
-#[derive(Copy, Clone)]
-pub enum ConditionalCheckResult {
-    Pass,
-    FailPositive,
-    FailNegative,
-    FailRange,
+impl ConditionalInformation {
+    pub fn new(etag: Option<String>, last_modified: Option<DateTime<Utc>>) -> Self {
+        ConditionalInformation { etag, last_modified }
+    }
 }
 
 pub struct ConditionalChecker<'a, 'b> {
@@ -26,15 +26,15 @@ impl ConditionalChecker<'_, '_> {
         ConditionalChecker { info, headers }
     }
 
-    pub fn check(&self) -> ConditionalCheckResult {
+    pub fn check(&mut self) -> MiddlewareResult<()> {
         if !self.check_positive_headers() {
-            ConditionalCheckResult::FailPositive
+            Err(MiddlewareOutput::Status(Status::PreconditionFailed, false))
         } else if !self.check_negative_headers() {
-            ConditionalCheckResult::FailNegative
+            Err(MiddlewareOutput::Status(Status::NotModified, false))
         } else if !self.check_range_header() {
-            ConditionalCheckResult::FailRange
+            Err(MiddlewareOutput::Status(Status::Ok, false)) // TODO
         } else {
-            ConditionalCheckResult::Pass
+            Ok(())
         }
     }
 

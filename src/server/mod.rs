@@ -1,6 +1,9 @@
 pub mod file_server;
 
-mod conditionals;
+mod request_verifier;
+mod response_gen;
+mod cond_checker;
+mod middleware;
 
 pub trait Server {
     fn start(&self);
