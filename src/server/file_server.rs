@@ -22,7 +22,9 @@ use crate::http::headers::Headers;
 use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use crate::http::response::Status;
 
+#[derive(Copy, Clone)]
 pub enum FileServerStartError {
     FileRootInvalid,
     TemplateRootInvalid,
@@ -97,7 +99,7 @@ impl FileServer {
             let file = match File::open(&target).await {
                 Ok(file) => file,
                 _ => {
-                    Self::handle_error(&mut writer, &template_root, consts::SC_NOT_FOUND, false).await?;
+                    Self::handle_error(&mut writer, &template_root, Status::NotFound, false).await?;
                     return Self::generic_error();
                 }
             };
@@ -139,13 +141,14 @@ impl FileServer {
             Ok(request) => request,
             Err(e) => {
                 let status = match e {
-                    RequestParseError::UriTooLong => consts::SC_URI_TOO_LONG,
-                    RequestParseError::UnsupportedVersion => consts::SC_HTTP_VERSION_UNSUPPORTED,
-                    RequestParseError::HeaderTooLong => consts::SC_HEADER_FIELDS_TOO_LARGE,
-                    RequestParseError::UnsupportedTransferEncoding => consts::SC_NOT_IMPLEMENTED,
-                    RequestParseError::BodyTooLarge => consts::SC_PAYLOAD_TOO_LARGE,
-                    RequestParseError::TimedOut => consts::SC_REQUEST_TIMEOUT,
-                    _ => consts::SC_BAD_REQUEST,
+                    RequestParseError::UriTooLong => Status::UriTooLong,
+                    RequestParseError::UnsupportedVersion => Status::HttpVersionUnsupported,
+                    RequestParseError::HeaderTooLong => Status::HeaderFieldsTooLarge,
+                    RequestParseError::InvalidExpectHeader => Status::ExpectationFailed,
+                    RequestParseError::UnsupportedTransferEncoding => Status::NotImplemented,
+                    RequestParseError::BodyTooLarge => Status::PayloadTooLarge,
+                    RequestParseError::TimedOut => Status::RequestTimeout,
+                    _ => Status::BadRequest,
                 };
                 Self::handle_error(writer, &template_root, status, true).await?;
                 return Self::generic_error();
@@ -153,7 +156,7 @@ impl FileServer {
         };
 
         if !matches!(&request.method, Method::Get | Method::Head) {
-            Self::handle_error(writer, template_root, consts::SC_METHOD_NOT_ALLOWED, false).await?;
+            Self::handle_error(writer, template_root, Status::MethodNotAllowed, false).await?;
             Self::generic_error()
         } else {
             Ok(request)
@@ -168,21 +171,23 @@ impl FileServer {
     ) -> HandleResult<()> {
         match ConditionalChecker::new(info, headers).check() {
             ConditionalCheckResult::FailPositive => {
-                Self::handle_error(writer, &template_root, consts::SC_PRECONDITION_FAILED, false).await?;
+                Self::handle_error(writer, &template_root, Status::PreconditionFailed, false).await?;
                 return Self::generic_error();
             }
             ConditionalCheckResult::FailNegative => {
-                Self::handle_error(writer, &template_root, consts::SC_NOT_MODIFIED, false).await?;
+                Self::handle_error(writer, &template_root, Status::NotModified, false).await?;
                 return Self::generic_error();
             }
             _ => Ok(())
         }
     }
 
-    async fn handle_error<W>(writer: &mut W, template_root: &str, status: i32, close: bool) -> HandleResult<()>
+    async fn handle_error<W>(writer: &mut W, template_root: &str, status: Status, close: bool) -> HandleResult<()>
         where W: Write + Unpin
     {
-        log::warn(format!("({})", status));
+        if status != Status::RequestTimeout {
+            log::warn(format!("({})", status));
+        }
 
         let error_file = format!("{}/error.html", template_root);
         let body = if !Path::new(&error_file).is_file().await {

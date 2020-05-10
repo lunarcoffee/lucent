@@ -11,7 +11,9 @@ use crate::http::{consts, headers};
 use crate::http::headers::Headers;
 use crate::http::uri::Uri;
 use crate::http::response::ResponseBuilder;
+use crate::http::response::Status;
 
+#[derive(Copy, Clone)]
 pub enum Method {
     Get,
     Head,
@@ -39,6 +41,7 @@ impl Display for Method {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum HttpVersion {
     Http09,
     Http10,
@@ -87,6 +90,7 @@ impl Debug for Request {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum RequestParseError {
     UnsupportedMethod,
     InvalidUri,
@@ -95,6 +99,7 @@ pub enum RequestParseError {
     InvalidHeader,
     HeaderTooLong,
     NoHostHeader,
+    InvalidExpectHeader,
     UnsupportedTransferEncoding,
     InvalidBody,
     BodyTooLarge,
@@ -195,9 +200,13 @@ impl<R: BufRead + Unpin, W: Write + Unpin> RequestParser<R, W> {
         };
 
         if headers.set(&parts[0], header_values) {
-            if (header_name.as_str(), header_value) == (consts::H_EXPECT, consts::H_EXPECT_CONTINUE) {
-                // TODO: test this
-                ResponseBuilder::new().with_status(consts::SC_CONTINUE).build().respond(&mut self.writer).await?;
+            if header_name.as_str() == consts::H_EXPECT {
+                let response = ResponseBuilder::new();
+                if header_value == consts::H_EXPECT_CONTINUE {
+                    response.with_status(Status::Continue).build().respond(&mut self.writer).await?;
+                } else {
+                    return Err(RequestParseError::InvalidExpectHeader);
+                }
             }
             Ok(())
         } else {

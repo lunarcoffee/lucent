@@ -8,6 +8,7 @@ pub struct ConditionalInformation {
     pub last_modified: Option<DateTime<Utc>>,
 }
 
+#[derive(Copy, Clone)]
 pub enum ConditionalCheckResult {
     Pass,
     FailPositive,

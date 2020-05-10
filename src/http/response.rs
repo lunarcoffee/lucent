@@ -8,10 +8,82 @@ use crate::http::headers::Headers;
 use crate::http::request::HttpVersion;
 use crate::util;
 use async_std::io::Write;
+use std::fmt::{Display, Formatter};
+use std::fmt;
+
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
+pub enum Status {
+    Continue = 100,
+    _SwitchingProtocols,
+    _Processing,
+    Ok = 200,
+    _Created,
+    _Accepted,
+    _NonAuthoritativeInformation,
+    NoContent,
+    _ResetContent,
+    _PartialContent,
+    _MultiStatus,
+    _AlreadyReported,
+    _MultipleChoices = 300,
+    _MovedPermanently,
+    _Found,
+    _SeeOther,
+    NotModified,
+    _UseProxy,
+    _TemporaryRedirect = 307,
+    _PermanentRedirect,
+    BadRequest = 400,
+    _Unauthorized,
+    _PaymentRequired,
+    _Forbidden,
+    NotFound,
+    MethodNotAllowed,
+    _NotAcceptable,
+    _ProxyAuthenticationRequired,
+    RequestTimeout,
+    _Conflict,
+    _Gone,
+    _LengthRequired,
+    PreconditionFailed,
+    PayloadTooLarge,
+    UriTooLong,
+    _UnsupportedMediaType,
+    _UnsatisfiableRange,
+    ExpectationFailed,
+    _ImATeapot,
+    _MisdirectedRequest = 421,
+    _UnprocessableEntity,
+    _Locked,
+    _FailedDependency,
+    _UpgradeRequired = 426,
+    _PreconditionRequired = 428,
+    _TooManyRequests,
+    HeaderFieldsTooLarge = 431,
+    _ConnectionClosed = 444,
+    _UnavailableForLegalReasons = 451,
+    _InternalServerError = 500,
+    NotImplemented,
+    _BadGateway,
+    _ServiceUnavailable,
+    _GatewayTimeout,
+    HttpVersionUnsupported,
+    _VariantAlsoNegotiates,
+    _InsufficientStorage,
+    _LoopDetected,
+    _NotExtended = 510,
+    _NetworkAuthenticationRequired,
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", *self as i32)
+    }
+}
 
 pub struct Response {
     pub version: HttpVersion,
-    pub status_code: i32,
+    pub status_code: Status,
     pub headers: Headers,
     pub body: Option<Vec<u8>>,
 }
@@ -47,16 +119,16 @@ impl ResponseBuilder {
         ResponseBuilder {
             response: Response {
                 version: HttpVersion::Http11,
-                status_code: consts::SC_OK,
+                status_code: Status::Ok,
                 headers,
                 body: None,
             }
         }
     }
 
-    pub fn with_status(mut self, status: i32) -> Self {
+    pub fn with_status(mut self, status: Status) -> Self {
         self.response.status_code = status;
-        if status == 204 || status < 200 {
+        if status == Status::NoContent || status < Status::Ok {
             self.response.headers.remove(consts::H_CONTENT_LENGTH);
         }
         self
