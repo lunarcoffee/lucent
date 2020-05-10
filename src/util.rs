@@ -3,6 +3,9 @@ use std::time::SystemTime;
 use chrono::{DateTime, Utc, Local};
 
 use crate::http::consts;
+use async_std::io::Write;
+use async_std::io::prelude::WriteExt;
+use async_std::io;
 
 pub fn get_time_utc() -> DateTime<Utc> {
     SystemTime::now().into()
@@ -57,4 +60,11 @@ pub fn media_type_by_ext(ext: &str) -> &str {
         "zip" => consts::H_MEDIA_ZIP,
         _ => consts::H_MEDIA_BINARY,
     }
+}
+
+pub async fn write_fully(writer: &mut (impl Write + Unpin), bytes: Vec<u8>) -> io::Result<()> {
+    io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+        writer.write_all(&bytes).await?;
+        writer.flush().await
+    }).await
 }

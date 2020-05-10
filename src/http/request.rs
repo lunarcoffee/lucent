@@ -1,17 +1,14 @@
-use std::{error, fmt};
-use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
-use async_std::io::{self, BufRead, BufReader, Write, BufWriter};
+use async_std::io::{self, BufReader, Write, BufWriter};
 use async_std::io::prelude::Read;
-use async_std::prelude::Future;
-use futures::{AsyncBufReadExt, AsyncReadExt};
 
-use crate::http::{consts, headers};
 use crate::http::headers::Headers;
 use crate::http::uri::Uri;
-use crate::http::response::ResponseBuilder;
-use crate::http::response::Status;
+use crate::http::parser::{MessageParser, MessageParseResult};
+use crate::http::message::Message;
+use crate::util;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Method {
@@ -68,221 +65,30 @@ pub struct Request {
 }
 
 impl Request {
-    pub async fn from<R: Read + Unpin, W: Write + Unpin>(reader: &mut R, writer: &mut W) -> RequestParseResult<Self> {
-        RequestParser {
-            reader: BufReader::new(reader),
-            writer: BufWriter::new(writer),
-        }.parse().await
+    pub async fn new<R: Read + Unpin, W: Write + Unpin>(reader: &mut R, writer: &mut W) -> MessageParseResult<Self> {
+        MessageParser::new(BufReader::new(reader), BufWriter::new(writer)).parse_request().await
+    }
+
+    pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
+        util::write_fully(writer, self.into_bytes()).await
     }
 }
 
-impl Display for Request {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.method, self.uri, self.http_version)
-    }
-}
-
-impl Debug for Request {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(self, f)?;
-        let body = self.body.clone().map(|b| String::from_utf8_lossy(&*b).to_string()).unwrap_or(String::new());
-        write!(f, "\n{:?}\n\n{}", self.headers, body)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub enum RequestParseError {
-    UnsupportedMethod,
-    InvalidUri,
-    UriTooLong,
-    UnsupportedVersion,
-    InvalidHeader,
-    HeaderTooLong,
-    NoHostHeader,
-    InvalidExpectHeader,
-    UnsupportedTransferEncoding,
-    InvalidBody,
-    BodyTooLarge,
-
-    TimedOut,
-    EndOfStream,
-    Unknown,
-}
-
-impl<T: error::Error> From<T> for RequestParseError {
-    fn from(_: T) -> Self {
-        RequestParseError::Unknown
-    }
-}
-
-pub type RequestParseResult<T> = Result<T, RequestParseError>;
-
-struct RequestParser<R: BufRead + Unpin, W: Write + Unpin> {
-    reader: R,
-    writer: W,
-}
-
-impl<R: BufRead + Unpin, W: Write + Unpin> RequestParser<R, W> {
-    async fn parse(&mut self) -> RequestParseResult<Request> {
-        let (method, uri, http_version) = self.parse_request_line().await?;
-        let headers = self.parse_headers().await?;
-        let body = self.parse_body(&headers).await?;
-
-        Ok(Request { method, uri, http_version, headers, body })
+impl Message for Request {
+    fn get_headers_mut(&mut self) -> &mut Headers {
+        &mut self.headers
     }
 
-    async fn parse_request_line(&mut self) -> RequestParseResult<(Method, Uri, HttpVersion)> {
-        let mut buf = Vec::with_capacity(8);
+    fn get_body_mut(&mut self) -> &mut Option<Vec<u8>> {
+        &mut self.body
+    }
 
-        with_timeout(self.reader.read_until(b' ', &mut buf)).await?;
-        if buf.is_empty() {
-            return Err(RequestParseError::EndOfStream);
+    fn into_bytes(self) -> Vec<u8> {
+        let mut bytes = format!("{} {} {}\r\n{:?}\r\n\r\n", self.method, self.uri, self.http_version, self.headers)
+            .into_bytes();
+        if let Some(mut body) = self.body {
+            bytes.append(&mut body);
         }
-        let method = match buf.as_slice() {
-            b"GET " => Method::Get,
-            b"HEAD " => Method::Head,
-            b"POST " => Method::Post,
-            b"PUT " => Method::Put,
-            b"DELETE " => Method::Delete,
-            b"CONNECT " => Method::Connect,
-            b"OPTIONS " => Method::Options,
-            b"TRACE " => Method::Trace,
-            _ => return Err(RequestParseError::UnsupportedMethod),
-        };
-        buf.clear();
-
-        with_timeout(self.reader.read_until(b' ', &mut buf)).await?;
-        let uri_raw = match String::from_utf8(buf[..buf.len() - 1].to_vec()) {
-            Ok(raw) => raw,
-            Err(_) => return Err(RequestParseError::InvalidUri),
-        };
-        let uri = Uri::from(&method, &uri_raw)?;
-
-        let mut buf = String::new();
-        with_timeout(self.reader.read_line(&mut buf)).await?;
-        let version = match buf.as_str() {
-            "HTTP/0.9\r\n" => HttpVersion::Http09,
-            "HTTP/1.0\r\n" => HttpVersion::Http10,
-            "HTTP/1.1\r\n" => HttpVersion::Http11,
-            _ => return Err(RequestParseError::UnsupportedVersion),
-        };
-
-        Ok((method, uri, version))
-    }
-
-    async fn parse_headers(&mut self) -> RequestParseResult<Headers> {
-        let mut headers = Headers::from(HashMap::new());
-        let mut buf = String::new();
-
-        loop {
-            buf.clear();
-            match with_timeout(self.reader.read_line(&mut buf)).await {
-                Ok(_) if buf == "\r\n" => break,
-                Ok(_) if buf.len() > consts::MAX_HEADER_LENGTH => return Err(RequestParseError::HeaderTooLong),
-                Ok(_) if buf.contains(':') => self.parse_header(&mut headers, &mut buf).await?,
-                Err(e) => return Err(e),
-                _ => return Err(RequestParseError::InvalidHeader),
-            }
-        }
-
-        if headers.contains(consts::H_HOST) {
-            Ok(headers)
-        } else {
-            Err(RequestParseError::NoHostHeader)
-        }
-    }
-
-    async fn parse_header(&mut self, headers: &mut Headers, buf: &mut String) -> RequestParseResult<()> {
-        let parts = buf.splitn(2, ':').collect::<Vec<_>>();
-        let header_name = parts[0].to_ascii_lowercase();
-        let header_value = parts[1].trim_end_matches(consts::CRLF).trim_matches(consts::OPTIONAL_WHITESPACE);
-
-        let header_values = if Headers::is_multi_value(parts[0]) {
-            header_value.split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE)).collect()
-        } else {
-            vec![header_value]
-        };
-
-        if headers.set(&parts[0], header_values) {
-            if header_name.as_str() == consts::H_EXPECT {
-                let response = ResponseBuilder::new();
-                if header_value == consts::H_EXPECT_CONTINUE {
-                    response.with_status(Status::Continue).build().respond(&mut self.writer).await?;
-                } else {
-                    return Err(RequestParseError::InvalidExpectHeader);
-                }
-            }
-            Ok(())
-        } else {
-            Err(RequestParseError::InvalidHeader)
-        }
-    }
-
-    async fn parse_body(&mut self, headers: &Headers) -> RequestParseResult<Option<Vec<u8>>> {
-        if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
-            if encodings.iter().any(|encoding| encoding != consts::H_T_ENC_CHUNKED) {
-                return Err(RequestParseError::UnsupportedTransferEncoding);
-            }
-            let (body, _) = self.parse_chunked_body().await?;
-            Ok(Some(body))
-        } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
-            let length = match length[0].parse() {
-                Ok(length) if length > consts::MAX_BODY_LENGTH => return Err(RequestParseError::BodyTooLarge),
-                Ok(length) => length,
-                _ => return Err(RequestParseError::InvalidBody),
-            };
-            let mut body = vec![0; length];
-            with_timeout(self.reader.read_exact(body.as_mut_slice())).await?;
-            Ok(Some(body))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn parse_chunked_body(&mut self) -> RequestParseResult<(Vec<u8>, Headers)> {
-        let mut body = vec![0u8; 0];
-        let mut line = String::new();
-        let mut chunk_size = 1;
-
-        while chunk_size > 0 {
-            with_timeout(self.reader.read_line(&mut line)).await?;
-            let parts = line[..line.len() - 2].split(';').collect::<Vec<_>>();
-            if parts.len() > 2 {
-                return Err(RequestParseError::InvalidBody);
-            }
-
-            chunk_size = usize::from_str_radix(parts[0], 16)?;
-            let chunk_ext = parts.get(1).unwrap_or(&"").split('=').collect::<Vec<_>>();
-            if chunk_ext.len() == 2 {
-                let (chunk_ext_name, chunk_ext_value) = (chunk_ext[0], chunk_ext[1]);
-                if !headers::is_token_string(chunk_ext_name) || !headers::is_token_string(chunk_ext_value) {
-                    return Err(RequestParseError::InvalidBody);
-                }
-            }
-            line.clear();
-
-            if chunk_size > 0 {
-                let mut buf = vec![0; chunk_size];
-                with_timeout(self.reader.read_exact(buf.as_mut_slice())).await?;
-                body.extend_from_slice(&buf);
-
-                with_timeout(self.reader.read_line(&mut line)).await?;
-                if line != "\r\n" {
-                    return Err(RequestParseError::InvalidBody);
-                }
-                line.clear();
-            }
-        }
-
-        let trailers = self.parse_headers().await?;
-        Ok((body, trailers))
-    }
-}
-
-async fn with_timeout<F: Future<Output=io::Result<R>>, R>(fut: F) -> RequestParseResult<R> {
-    match io::timeout(consts::MAX_READ_TIMEOUT, fut).await {
-        Ok(result) => Ok(result),
-        Err(e) if e.kind() == io::ErrorKind::TimedOut => Err(RequestParseError::TimedOut),
-        _ => Err(RequestParseError::Unknown)
+        bytes
     }
 }

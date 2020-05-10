@@ -13,8 +13,8 @@ use futures::io::ErrorKind;
 
 use crate::{log, util};
 use crate::http::consts;
-use crate::http::request::{Method, Request, RequestParseError, HttpVersion};
-use crate::http::response::ResponseBuilder;
+use crate::http::request::{Method, Request, HttpVersion};
+use crate::http::response::Response;
 use crate::server::Server;
 use crate::server::conditionals::{ConditionalChecker, ConditionalCheckResult, ConditionalInformation};
 use async_std::fs::File;
@@ -22,8 +22,10 @@ use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use crate::http::response::Status;
+use crate::http::parser::MessageParseError;
+use crate::http::message::{MessageBuilder, Message};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum FileServerStartError {
     FileRootInvalid,
     TemplateRootInvalid,
@@ -117,12 +119,12 @@ impl FileServer {
             let body = if request.method == Method::Head { vec![] } else { body };
 
             log::info(format!("({}) {} {}", Status::Ok, request.method, request.uri));
-            ResponseBuilder::new()
+            MessageBuilder::<Response>::new()
                 .with_header(consts::H_ETAG, &info.etag.unwrap())
                 .with_header(consts::H_LAST_MODIFIED, &util::format_time_imf(&info.last_modified.unwrap().into()))
                 .with_body(body, media_type)
                 .build()
-                .respond(&mut writer)
+                .send(&mut writer)
                 .await?;
         }
         Ok(())
@@ -132,18 +134,18 @@ impl FileServer {
         where R: Read + Unpin,
               W: Write + Unpin
     {
-        let request = match Request::from(reader, writer).await {
+        let request = match Request::new(reader, writer).await {
             Ok(request) => request,
             Err(e) => {
                 let status = match e {
-                    RequestParseError::UriTooLong => Status::UriTooLong,
-                    RequestParseError::UnsupportedVersion => Status::HttpVersionUnsupported,
-                    RequestParseError::HeaderTooLong => Status::HeaderFieldsTooLarge,
-                    RequestParseError::InvalidExpectHeader => Status::ExpectationFailed,
-                    RequestParseError::UnsupportedTransferEncoding => Status::NotImplemented,
-                    RequestParseError::BodyTooLarge => Status::PayloadTooLarge,
-                    RequestParseError::EndOfStream => return Self::generic_error(),
-                    RequestParseError::TimedOut => Status::RequestTimeout,
+                    MessageParseError::UriTooLong => Status::UriTooLong,
+                    MessageParseError::UnsupportedVersion => Status::HttpVersionUnsupported,
+                    MessageParseError::HeaderTooLong => Status::HeaderFieldsTooLarge,
+                    MessageParseError::InvalidExpectHeader => Status::ExpectationFailed,
+                    MessageParseError::UnsupportedTransferEncoding => Status::NotImplemented,
+                    MessageParseError::BodyTooLarge => Status::PayloadTooLarge,
+                    MessageParseError::EndOfStream => return Self::generic_error(),
+                    MessageParseError::TimedOut => Status::RequestTimeout,
                     _ => Status::BadRequest,
                 };
                 Self::handle_error(writer, &template_root, status, None).await?;
@@ -204,13 +206,13 @@ impl FileServer {
                 .into_bytes()
         };
 
-        ResponseBuilder::new()
+        MessageBuilder::<Response>::new()
             .with_status(status)
             .with_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
             .with_header_multi(consts::H_ACCEPT, vec![&Method::Get.to_string(), &Method::Head.to_string()])
             .with_body(body, consts::H_MEDIA_HTML)
             .build()
-            .respond(writer)
+            .send(writer)
             .await?;
         Ok(())
     }
@@ -219,7 +221,7 @@ impl FileServer {
         where W: Write + Unpin
     {
         log::info(format!("({}) {} {}", status, request.method, request.uri));
-        ResponseBuilder::new().with_status(status).build().respond(writer).await?;
+        MessageBuilder::<Response>::new().with_status(status).build().send(writer).await?;
         Ok(())
     }
 

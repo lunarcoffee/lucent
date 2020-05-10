@@ -3,7 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::fmt;
 
 use crate::http::consts;
-use crate::http::request::{Method, RequestParseError, RequestParseResult};
+use crate::http::request::Method;
+use crate::http::parser::{MessageParseResult, MessageParseError};
 
 pub struct Authority {
     user_info: Option<String>,
@@ -53,7 +54,7 @@ pub enum Uri {
 }
 
 impl Uri {
-    pub fn from(method: &Method, raw: &str) -> RequestParseResult<Self> {
+    pub fn from(method: &Method, raw: &str) -> MessageParseResult<Self> {
         UriParser { method, raw }.parse()
     }
 }
@@ -69,15 +70,15 @@ impl Display for Uri {
     }
 }
 
-struct UriParser<'a> {
+struct UriParser<'a, 'b> {
     method: &'a Method,
-    raw: &'a str,
+    raw: &'b str,
 }
 
-impl UriParser<'_> {
-    fn parse(&mut self) -> RequestParseResult<Uri> {
+impl UriParser<'_, '_> {
+    fn parse(&mut self) -> MessageParseResult<Uri> {
         if self.raw.len() > consts::MAX_URI_LENGTH {
-            Err(RequestParseError::UriTooLong)
+            Err(MessageParseError::UriTooLong)
         } else if self.raw == "*" && *self.method == Method::Options {
             Ok(Uri::AsteriskForm)
         } else if *self.method == Method::Connect {
@@ -94,25 +95,25 @@ impl UriParser<'_> {
         }
     }
 
-    fn parse_pre_authority(&mut self) -> RequestParseResult<()> {
+    fn parse_pre_authority(&mut self) -> MessageParseResult<()> {
         if self.raw.starts_with("http://") && self.raw.len() > 7 {
             self.raw = &self.raw[7..];
         } else if self.raw.starts_with("https://") && self.raw.len() > 8 {
             self.raw = &self.raw[8..];
         } else {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
         Ok(())
     }
 
-    fn parse_authority(&mut self, accept_user: bool) -> RequestParseResult<Authority> {
+    fn parse_authority(&mut self, accept_user: bool) -> MessageParseResult<Authority> {
         let authority_part = &self.raw[..self.raw.find('/').unwrap_or(self.raw.len())];
         let user_info = if let Some(index) = authority_part.find('@') {
             let info = &authority_part[..index];
             if accept_user && info.chars().all(|c| is_user_info_char(c)) {
                 Some(info.to_string())
             } else {
-                return Err(RequestParseError::InvalidUri);
+                return Err(MessageParseError::InvalidUri);
             }
         } else {
             None
@@ -120,17 +121,17 @@ impl UriParser<'_> {
 
         let host_and_port = authority_part.split(':').collect::<Vec<_>>();
         if host_and_port.is_empty() || host_and_port.len() > 2 {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
 
         let host = host_and_port[0].to_string();
         if host.chars().any(|c| !is_host_char(c)) {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
 
         let port = match host_and_port.get(1).map(|s| s.parse()) {
             Some(Ok(port)) => Some(port),
-            Some(Err(_)) => return Err(RequestParseError::InvalidUri),
+            Some(Err(_)) => return Err(MessageParseError::InvalidUri),
             _ => None,
         };
 
@@ -138,9 +139,9 @@ impl UriParser<'_> {
         Ok(Authority { user_info, host, port })
     }
 
-    fn parse_absolute_path(&mut self, accept_empty: bool) -> RequestParseResult<AbsolutePath> {
+    fn parse_absolute_path(&mut self, accept_empty: bool) -> MessageParseResult<AbsolutePath> {
         if !accept_empty && (self.raw.is_empty() || !self.raw.starts_with('/')) {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
 
         let (mut raw_path, raw_query) = if let Some(index) = self.raw.find('?') {
@@ -155,11 +156,11 @@ impl UriParser<'_> {
 
         let mut path = raw_path.split('/').map(|segment| segment.to_string()).collect::<Vec<_>>();
         if !path[0].is_empty() {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
         path = path.into_iter().skip(1).map(|s| s.to_string()).collect();
         if path.iter().any(|part| part.is_empty() || part.chars().any(|c| !is_path_char(c))) {
-            return Err(RequestParseError::InvalidUri);
+            return Err(MessageParseError::InvalidUri);
         }
 
         if raw_query.is_empty() {
@@ -174,7 +175,7 @@ impl UriParser<'_> {
                 let query = params.iter().map(|p| (p[0].to_string(), p[1].to_string())).collect();
                 Ok(AbsolutePath { path, query: Some(query) })
             } else {
-                Err(RequestParseError::InvalidUri)
+                Err(MessageParseError::InvalidUri)
             }
         }
     }
