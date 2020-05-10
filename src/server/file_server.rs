@@ -1,5 +1,6 @@
-use std::{error, fs};
+use std::error;
 
+use async_std::fs;
 use async_std::io::{self, BufReader, BufWriter};
 use async_std::io::prelude::*;
 use async_std::net::{TcpListener, TcpStream};
@@ -15,6 +16,12 @@ use crate::http::consts;
 use crate::http::request::{Method, Request, RequestParseError, HttpVersion};
 use crate::http::response::ResponseBuilder;
 use crate::server::Server;
+use crate::server::conditionals::{ConditionalChecker, ConditionalCheckResult, ConditionalInformation};
+use async_std::fs::File;
+use crate::http::headers::Headers;
+use chrono::{DateTime, Utc};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 pub enum FileServerStartError {
     FileRootInvalid,
@@ -70,7 +77,7 @@ impl FileServer {
                         let template_root = self.template_root.clone();
                         task::spawn(async { let _ = Self::handle_incoming(stream, file_root, template_root).await; });
                     }
-                    None => break,
+                    _ => break,
                 }
             }
         }
@@ -86,20 +93,32 @@ impl FileServer {
             log::info(format!("{} {}", request.method, request.uri));
 
             let target_string = &request.uri.to_string();
-            let target = if target_string == "/" { "/index.html" } else { target_string };
-            let file = match fs::read(format!("{}{}", file_root, target)) {
-                Ok(bytes) => bytes,
+            let target = format!("{}{}", file_root, if target_string == "/" { "/index.html" } else { target_string });
+            let file = match File::open(&target).await {
+                Ok(file) => file,
                 _ => {
                     Self::handle_error(&mut writer, &template_root, consts::SC_NOT_FOUND, false).await?;
-                    return generic_error();
+                    return Self::generic_error();
                 }
             };
 
-            let file_ext = Path::new(target).extension().map(|s| s.to_str().unwrap_or("")).unwrap_or("");
+            let last_modified = file.metadata().await?.modified()?.into();
+            let info = ConditionalInformation {
+                etag: Some(Self::generate_etag(&last_modified)),
+                last_modified: Some(last_modified),
+            };
+            if let Err(_) = Self::handle_conditionals(&mut writer, &template_root, &info, &request.headers).await {
+                continue;
+            }
+
+            let body = fs::read(&target).await?;
+            let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
             let media_type = util::media_type_by_ext(file_ext);
-            let body = if matches!(request.method, Method::Head) { vec![] } else { file };
+            let body = if matches!(request.method, Method::Head) { vec![] } else { body };
 
             ResponseBuilder::new()
+                .with_header(consts::H_ETAG, &info.etag.unwrap())
+                .with_header(consts::H_LAST_MODIFIED, &util::format_time_imf(&info.last_modified.unwrap().into()))
                 .with_body(body, media_type)
                 .build()
                 .respond(&mut writer)
@@ -128,30 +147,50 @@ impl FileServer {
                     RequestParseError::TimedOut => consts::SC_REQUEST_TIMEOUT,
                     _ => consts::SC_BAD_REQUEST,
                 };
-                log::info(format!("({}) (request did not parse)", status));
                 Self::handle_error(writer, &template_root, status, true).await?;
-                return generic_error();
+                return Self::generic_error();
             }
         };
 
         if !matches!(&request.method, Method::Get | Method::Head) {
             Self::handle_error(writer, template_root, consts::SC_METHOD_NOT_ALLOWED, false).await?;
-            log::info(format!("({}) (invalid request method)", consts::SC_METHOD_NOT_ALLOWED));
-            generic_error()
+            Self::generic_error()
         } else {
             Ok(request)
+        }
+    }
+
+    async fn handle_conditionals(
+        writer: &mut (impl Write + Unpin),
+        template_root: &String,
+        info: &ConditionalInformation,
+        headers: &Headers,
+    ) -> HandleResult<()> {
+        match ConditionalChecker::new(info, headers).check() {
+            ConditionalCheckResult::FailPositive => {
+                Self::handle_error(writer, &template_root, consts::SC_PRECONDITION_FAILED, false).await?;
+                return Self::generic_error();
+            }
+            ConditionalCheckResult::FailNegative => {
+                Self::handle_error(writer, &template_root, consts::SC_NOT_MODIFIED, false).await?;
+                return Self::generic_error();
+            }
+            _ => Ok(())
         }
     }
 
     async fn handle_error<W>(writer: &mut W, template_root: &str, status: i32, close: bool) -> HandleResult<()>
         where W: Write + Unpin
     {
+        log::warn(format!("({})", status));
+
         let error_file = format!("{}/error.html", template_root);
         let body = if !Path::new(&error_file).is_file().await {
-            return generic_error();
+            return Self::generic_error();
         } else {
             let status = status.to_string();
-            fs::read_to_string(&error_file)?
+            fs::read_to_string(&error_file)
+                .await?
                 .replace("{server}", consts::SERVER_NAME_VERSION)
                 .replace("{status}", &status)
                 .into_bytes()
@@ -171,6 +210,21 @@ impl FileServer {
             .respond(writer)
             .await?;
         Ok(())
+    }
+
+    fn generate_etag(modified: &DateTime<Utc>) -> String {
+        let mut hasher = DefaultHasher::new();
+        let time = util::format_time_imf(modified);
+        time.hash(&mut hasher);
+
+        let etag = format!("\"{:x}", hasher.finish());
+        time.chars().into_iter().rev().collect::<String>().hash(&mut hasher);
+
+        etag + &format!("{:x}\"", hasher.finish())
+    }
+
+    fn generic_error<T>() -> HandleResult<T> {
+        Err(Box::new(io::Error::from(ErrorKind::Other)))
     }
 }
 
@@ -193,8 +247,4 @@ fn client_intends_to_close(request: &Request) -> bool {
     } else {
         !matches!(&request.http_version, HttpVersion::Http11)
     }
-}
-
-fn generic_error<T>() -> HandleResult<T> {
-    Err(Box::new(io::Error::from(ErrorKind::Other)))
 }
