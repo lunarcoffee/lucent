@@ -23,6 +23,10 @@ pub fn format_time_imf(time: &DateTime<Utc>) -> String {
     time.format("%a, %d %b %Y %T GMT").to_string()
 }
 
+pub fn is_visible_char(ch: char) -> bool {
+    ('!'..='~').contains(&ch)
+}
+
 pub fn media_type_by_ext(ext: &str) -> &str {
     match ext {
         "aac" => consts::H_MEDIA_AAC,

@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::fmt;
 
 use crate::http::consts;
+use crate::util;
 
 const MULTI_VALUE_HEADER_NAMES: &[&str] = &[
     consts::H_ACCEPT, consts::H_ACCEPT_CHARSET, consts::H_ACCEPT_ENCODING, consts::H_ACCEPT_LANGUAGE,
@@ -71,11 +72,7 @@ impl Debug for Headers {
 }
 
 fn is_valid_header_value(str: &str) -> bool {
-    str.chars().all(|c| is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
-}
-
-fn is_visible_char(ch: char) -> bool {
-    ('!'..='~').contains(&ch)
+    str.chars().all(|c| util::is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
 }
 
 const TOKEN_CHARS: &str = "!#$%&'*+-.^_`|~";

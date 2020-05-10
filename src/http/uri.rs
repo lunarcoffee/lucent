@@ -5,6 +5,7 @@ use std::fmt;
 use crate::http::consts;
 use crate::http::request::Method;
 use crate::http::parser::{MessageParseResult, MessageParseError};
+use crate::util;
 
 pub struct Authority {
     user_info: Option<String>,
@@ -16,7 +17,7 @@ impl Display for Authority {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let user_info = self.user_info.clone().map(|info| format!("{}@", info)).unwrap_or(String::new());
         let port = self.port.map(|port| format!(":{}", port)).unwrap_or(String::new());
-        write!(f, "{}{}{}", user_info, self.host, port)
+        write!(f, "{}{}{}", encode_percent(&user_info), encode_percent(&self.host), port)
     }
 }
 
@@ -39,7 +40,7 @@ impl Display for AbsolutePath {
             }
             _ => String::new(),
         };
-        write!(f, "/{}{}", path_joined, query_joined)
+        write!(f, "/{}{}", encode_percent(&path_joined), encode_percent(&query_joined))
     }
 }
 
@@ -101,7 +102,7 @@ impl UriParser<'_, '_> {
         } else if self.raw.starts_with("https://") && self.raw.len() > 8 {
             self.raw = &self.raw[8..];
         } else {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
         }
         Ok(())
     }
@@ -111,9 +112,9 @@ impl UriParser<'_, '_> {
         let user_info = if let Some(index) = authority_part.find('@') {
             let info = &authority_part[..index];
             if accept_user && info.chars().all(|c| is_user_info_char(c)) {
-                Some(info.to_string())
+                Some(decode_percent(info).ok_or(MessageParseError::InvalidUri)?)
             } else {
-                return Err(MessageParseError::InvalidUri);
+                return Self::uri_error();
             }
         } else {
             None
@@ -121,17 +122,18 @@ impl UriParser<'_, '_> {
 
         let host_and_port = authority_part.split(':').collect::<Vec<_>>();
         if host_and_port.is_empty() || host_and_port.len() > 2 {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
         }
 
-        let host = host_and_port[0].to_string();
+        let mut host = host_and_port[0].to_string();
         if host.chars().any(|c| !is_host_char(c)) {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
         }
+        host = decode_percent(&host).ok_or(MessageParseError::InvalidUri)?;
 
         let port = match host_and_port.get(1).map(|s| s.parse()) {
             Some(Ok(port)) => Some(port),
-            Some(Err(_)) => return Err(MessageParseError::InvalidUri),
+            Some(Err(_)) => return Self::uri_error(),
             _ => None,
         };
 
@@ -141,7 +143,7 @@ impl UriParser<'_, '_> {
 
     fn parse_absolute_path(&mut self, accept_empty: bool) -> MessageParseResult<AbsolutePath> {
         if !accept_empty && (self.raw.is_empty() || !self.raw.starts_with('/')) {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
         }
 
         let (mut raw_path, raw_query) = if let Some(index) = self.raw.find('?') {
@@ -156,11 +158,16 @@ impl UriParser<'_, '_> {
 
         let mut path = raw_path.split('/').map(|segment| segment.to_string()).collect::<Vec<_>>();
         if !path[0].is_empty() {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
         }
         path = path.into_iter().skip(1).map(|s| s.to_string()).collect();
         if path.iter().any(|part| part.is_empty() || part.chars().any(|c| !is_path_char(c))) {
-            return Err(MessageParseError::InvalidUri);
+            return Self::uri_error();
+        }
+        let old_len = path.len();
+        path = path.iter().filter_map(|s| decode_percent(s)).collect();
+        if path.len() < old_len {
+            return Self::uri_error();
         }
 
         if raw_query.is_empty() {
@@ -172,12 +179,22 @@ impl UriParser<'_, '_> {
                 .collect::<Vec<_>>();
 
             if params.iter().all(|p| p.len() == 2 && is_query_string(p[0]) && is_query_string(p[1])) {
-                let query = params.iter().map(|p| (p[0].to_string(), p[1].to_string())).collect();
+                let query = params
+                    .iter()
+                    .filter_map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
+                    .collect::<HashMap<_, _>>();
+                if query.len() < params.len() {
+                    return Self::uri_error();
+                }
                 Ok(AbsolutePath { path, query: Some(query) })
             } else {
-                Err(MessageParseError::InvalidUri)
+                Self::uri_error()
             }
         }
+    }
+
+    const fn uri_error<T>() -> MessageParseResult<T> {
+        Err(MessageParseError::InvalidUri)
     }
 }
 
@@ -201,4 +218,27 @@ const HOST_CHARS: &str = "-._~%!$&'()*+,;=";
 
 fn is_host_char(ch: char) -> bool {
     HOST_CHARS.contains(ch) || ch.is_ascii_alphanumeric()
+}
+
+fn decode_percent(str: &str) -> Option<String> {
+    let mut decoded = String::new();
+    let mut last_index = 0;
+    for (index, _) in str.match_indices('%') {
+        decoded.push_str(&str[last_index..index]);
+        if index + 3 > str.len() {
+            return None;
+        }
+        let ch = u8::from_str_radix(&str[index + 1..index + 3], 16).ok()? as char;
+        decoded.push(ch);
+        last_index = index + 3;
+    }
+    decoded.push_str(&str[last_index..]);
+    Some(decoded)
+}
+
+fn encode_percent(str: &str) -> String {
+    str.chars()
+        .map(|c| if util::is_visible_char(c) { c.to_string() } else { format!("%{:02x}", c as u8) })
+        .collect::<Vec<_>>()
+        .join("")
 }

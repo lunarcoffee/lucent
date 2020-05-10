@@ -23,7 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use crate::http::response::Status;
 use crate::http::parser::MessageParseError;
-use crate::http::message::{MessageBuilder, Message};
+use crate::http::message::MessageBuilder;
 
 #[derive(Copy, Clone, Debug)]
 pub enum FileServerStartError {
@@ -101,7 +101,7 @@ impl FileServer {
             let file = match File::open(&target).await {
                 Ok(file) => file,
                 _ => {
-                    Self::handle_error(&mut writer, &template_root, Status::NotFound, Some(&request)).await?;
+                    Self::respond_error(&mut writer, &template_root, Status::NotFound, Some(&request)).await?;
                     return Self::generic_error();
                 }
             };
@@ -148,13 +148,13 @@ impl FileServer {
                     MessageParseError::TimedOut => Status::RequestTimeout,
                     _ => Status::BadRequest,
                 };
-                Self::handle_error(writer, &template_root, status, None).await?;
+                Self::respond_error(writer, &template_root, status, None).await?;
                 return Self::generic_error();
             }
         };
 
         if request.method != Method::Get && request.method != Method::Head {
-            Self::handle_error(writer, template_root, Status::MethodNotAllowed, Some(&request)).await?;
+            Self::respond_error(writer, template_root, Status::MethodNotAllowed, Some(&request)).await?;
             Self::generic_error()
         } else {
             Ok(request)
@@ -169,18 +169,18 @@ impl FileServer {
     ) -> HandleResult<()> {
         match ConditionalChecker::new(info, &request.headers).check() {
             ConditionalCheckResult::FailPositive => {
-                Self::handle_error(writer, template_root, Status::PreconditionFailed, Some(request)).await?;
+                Self::respond_error(writer, template_root, Status::PreconditionFailed, Some(request)).await?;
                 return Self::generic_error();
             }
             ConditionalCheckResult::FailNegative => {
-                Self::handle_status(writer, request, Status::NotModified).await?;
+                Self::respond_status(writer, request, Status::NotModified).await?;
                 return Self::generic_error();
             }
             _ => Ok(())
         }
     }
 
-    async fn handle_error(
+    async fn respond_error(
         writer: &mut (impl Write + Unpin),
         template_root: &str,
         status: Status,
@@ -217,7 +217,7 @@ impl FileServer {
         Ok(())
     }
 
-    async fn handle_status<W>(writer: &mut W, request: &Request, status: Status) -> HandleResult<()>
+    async fn respond_status<W>(writer: &mut W, request: &Request, status: Status) -> HandleResult<()>
         where W: Write + Unpin
     {
         log::info(format!("({}) {} {}", status, request.method, request.uri));
