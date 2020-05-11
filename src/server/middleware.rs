@@ -6,7 +6,7 @@ use crate::http::request::{Request, Method};
 use crate::log;
 use async_std::path::Path;
 use crate::consts;
-use crate::http::message::MessageBuilder;
+use crate::http::message::{MessageBuilder, Message};
 
 pub enum MiddlewareOutput {
     Error(Status, bool),

@@ -10,6 +10,7 @@ use std::fmt;
 use num_enum::TryFromPrimitive;
 use crate::http::parser::{MessageParseResult, MessageParser};
 use crate::http::message::Message;
+use crate::http::message;
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, TryFromPrimitive)]
 #[repr(usize)]
@@ -96,7 +97,7 @@ impl Response {
     }
 
     pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
-        util::write_fully(writer, self.into_bytes()).await
+        message::send(writer, self).await
     }
 }
 
@@ -109,15 +110,19 @@ impl Message for Response {
         &mut self.body
     }
 
+    fn into_body(self) -> Option<Vec<u8>> {
+        self.body
+    }
+
+    fn is_chunked(&self) -> bool {
+        self.chunked
+    }
+
     fn set_chunked(&mut self) {
         self.chunked = true;
     }
 
-    fn into_bytes(self) -> Vec<u8> {
-        let mut bytes = format!("{} {}\r\n{:?}\r\n\r\n", self.http_version, self.status, self.headers).into_bytes();
-        if let Some(mut body) = self.body {
-            bytes.append(&mut body);
-        }
-        bytes
+    fn to_bytes_no_body(&self) -> Vec<u8> {
+        format!("{} {}\r\n{:?}\r\n\r\n", self.http_version, self.status, self.headers).into_bytes()
     }
 }

@@ -94,6 +94,6 @@ impl<'a, 'b, 'c> RangeParser<'a, 'b, 'c> {
     }
 
     fn get_content_range(&self, range: &Range) -> String {
-        format!("{} {}-{}/{}", consts::H_RANGE_UNIT_BYTES, range.low, range.high, self.body.len())
+        format!("{} {}-{}/{}", consts::H_RANGE_UNIT_BYTES, range.low, range.high - 1, self.body.len())
     }
 }

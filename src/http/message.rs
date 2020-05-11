@@ -4,13 +4,27 @@ use crate::http::headers::Headers;
 use std::collections::HashMap;
 use crate::http::uri::Uri;
 use crate::{util, consts};
+use async_std::io::Write;
+use async_std::io;
+use async_std::io::prelude::WriteExt;
 
 pub trait Message {
     fn get_headers_mut(&mut self) -> &mut Headers;
     fn get_body_mut(&mut self) -> &mut Option<Vec<u8>>;
+    fn into_body(self) -> Option<Vec<u8>>;
+
+    fn is_chunked(&self) -> bool;
     fn set_chunked(&mut self);
 
-    fn into_bytes(self) -> Vec<u8>;
+    fn to_bytes_no_body(&self) -> Vec<u8>;
+
+    fn into_bytes(self) -> Vec<u8> where Self: Sized {
+        let mut bytes = self.to_bytes_no_body();
+        if let Some(mut body) = self.into_body() {
+            bytes.append(&mut body);
+        }
+        bytes
+    }
 }
 
 pub struct MessageBuilder<M: Message> {
@@ -113,7 +127,7 @@ impl<M: Message> MessageBuilder<M> {
     }
 
     pub fn with_body(mut self, body: Vec<u8>, media_type: &str) -> Self {
-        if body.len() > consts::MAX_BODY_LENGTH {
+        if body.len() > consts::MAX_BODY_BEFORE_CHUNK {
             self.message.set_chunked();
             self = self
                 .with_header(consts::H_TRANSFER_ENCODING, consts::H_T_ENC_CHUNKED)
@@ -128,5 +142,35 @@ impl<M: Message> MessageBuilder<M> {
 
     pub fn build(self) -> M {
         self.message
+    }
+}
+
+pub async fn send(writer: &mut (impl Write + Unpin), mut message: impl Message) -> io::Result<()> {
+    if message.is_chunked() {
+        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+            writer.write_all(&message.to_bytes_no_body()).await?;
+            writer.flush().await
+        }).await?;
+
+        if let Some(body) = message.into_body().map(|b| b.into_boxed_slice()) {
+            for chunk in body.chunks(consts::CHUNK_SIZE) {
+                let size = format!("{:x}\r\n", chunk.len()).into_bytes();
+                io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+                    writer.write(&size).await;
+                    writer.write(chunk).await;
+                    writer.write(b"\r\n").await
+                }).await?;
+            }
+            io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+                writer.write(b"0\r\n\r\n").await;
+                writer.flush().await
+            }).await?;
+        }
+        Ok(())
+    } else {
+        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+            writer.write_all(&message.into_bytes()).await?;
+            writer.flush().await
+        }).await
     }
 }

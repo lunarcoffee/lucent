@@ -9,6 +9,7 @@ use crate::http::uri::Uri;
 use crate::http::parser::{MessageParser, MessageParseResult};
 use crate::http::message::Message;
 use crate::util;
+use crate::http::message;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Method {
@@ -71,7 +72,7 @@ impl Request {
     }
 
     pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
-        util::write_fully(writer, self.into_bytes()).await
+        message::send(writer, self).await
     }
 }
 
@@ -84,16 +85,19 @@ impl Message for Request {
         &mut self.body
     }
 
+    fn into_body(self) -> Option<Vec<u8>> {
+        self.body
+    }
+
+    fn is_chunked(&self) -> bool {
+        self.chunked
+    }
+
     fn set_chunked(&mut self) {
         self.chunked = true;
     }
 
-    fn into_bytes(self) -> Vec<u8> {
-        let mut bytes = format!("{} {} {}\r\n{:?}\r\n\r\n", self.method, self.uri, self.http_version, self.headers)
-            .into_bytes();
-        if let Some(mut body) = self.body {
-            bytes.append(&mut body);
-        }
-        bytes
+    fn to_bytes_no_body(&self) -> Vec<u8> {
+        format!("{} {} {}\r\n{:?}\r\n\r\n", self.method, self.uri, self.http_version, self.headers).into_bytes()
     }
 }

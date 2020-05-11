@@ -11,6 +11,7 @@ pub const MAX_BODY_LENGTH: usize = 4_194_304;
 pub const MAX_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
+pub const MAX_BODY_BEFORE_CHUNK: usize = 8_192;
 pub const CHUNK_SIZE: usize = 4_096;
 
 pub const H_ACCEPT: &str = "accept";

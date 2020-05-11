@@ -65,10 +65,3 @@ pub fn media_type_by_ext(ext: &str) -> &str {
         _ => consts::H_MEDIA_BINARY,
     }
 }
-
-pub async fn write_fully(writer: &mut (impl Write + Unpin), bytes: Vec<u8>) -> io::Result<()> {
-    io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-        writer.write_all(&bytes).await?;
-        writer.flush().await
-    }).await
-}
