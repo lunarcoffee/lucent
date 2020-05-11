@@ -5,7 +5,7 @@ use async_std::io::Write;
 use crate::http::request::{Request, Method};
 use crate::log;
 use async_std::path::Path;
-use crate::http::consts;
+use crate::consts;
 use crate::http::message::MessageBuilder;
 
 pub enum MiddlewareOutput {
@@ -62,7 +62,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
 
         let mut response = MessageBuilder::<Response>::new();
         if close {
-            response = response.with_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
+            response.set_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
         }
         response
             .with_status(status)
@@ -79,7 +79,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
 
         let mut response = MessageBuilder::<Response>::new();
         if close {
-            response = response.with_header(consts::H_CONNECTION, consts::H_CONN_CLOSE);
+            response.set_header(consts::H_CONNECTION, consts::H_CONN_CLOSE);
         }
         response.with_status(status).build().send(self.writer).await.is_err() || close
     }

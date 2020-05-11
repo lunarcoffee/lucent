@@ -11,6 +11,8 @@ pub const MAX_BODY_LENGTH: usize = 4_194_304;
 pub const MAX_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
+pub const CHUNK_SIZE: usize = 4_096;
+
 pub const H_ACCEPT: &str = "accept";
 pub const H_ACCEPT_CHARSET: &str = "accept-charset";
 pub const H_ACCEPT_ENCODING: &str = "accept-encoding";
@@ -22,6 +24,7 @@ pub const H_UPGRADE: &str = "upgrade";
 pub const H_VIA: &str = "via";
 pub const H_CONTENT_LENGTH: &str = "content-length";
 pub const H_CONTENT_TYPE: &str = "content-type";
+pub const H_CONTENT_RANGE: &str = "content-range";
 pub const H_HOST: &str = "host";
 pub const H_SERVER: &str = "server";
 pub const H_DATE: &str = "date";
@@ -33,6 +36,8 @@ pub const H_IF_MATCH: &str = "if-match";
 pub const H_IF_NONE_MATCH: &str = "if-none-match";
 pub const H_IF_MODIFIED_SINCE: &str = "if-modified-since";
 pub const H_IF_UNMODIFIED_SINCE: &str = "if-unmodified-since";
+pub const H_IF_RANGE: &str = "if-range";
+pub const H_RANGE: &str = "range";
 
 pub const H_T_ENC_CHUNKED: &str = "chunked";
 pub const _H_T_ENC_COMPRESS: &str = "compress";
@@ -44,6 +49,8 @@ pub const H_CONN_KEEP_ALIVE: &str = "keep-alive";
 pub const H_CONN_CLOSE: &str = "close";
 
 pub const H_EXPECT_CONTINUE: &str = "100-continue";
+
+pub const H_RANGE_UNIT_BYTES: &str = "bytes";
 
 pub const H_MEDIA_AAC: &str = "audio/aac";
 pub const H_MEDIA_AVI: &str = "video/x-msvideo";
@@ -62,6 +69,7 @@ pub const H_MEDIA_JAVASCRIPT: &str = "text/javascript";
 pub const H_MEDIA_JSON: &str = "application/json";
 pub const H_MEDIA_MP3: &str = "audio/mpeg";
 pub const H_MEDIA_MP4: &str = "video/mp4";
+pub const H_MEDIA_MULTIPART_RANGE: &str = "multipart/byteranges";
 pub const H_MEDIA_OGG_AUDIO: &str = "audio/ogg";
 pub const H_MEDIA_PNG: &str = "image/png";
 pub const H_MEDIA_PDF: &str = "application/pdf";

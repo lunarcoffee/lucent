@@ -7,7 +7,7 @@ use async_std::task;
 use futures::{FutureExt, select};
 
 use crate::log;
-use crate::http::consts;
+use crate::consts;
 use crate::http::request::{Request, HttpVersion};
 use crate::server::Server;
 use crate::server::response_gen::ResponseGenerator;

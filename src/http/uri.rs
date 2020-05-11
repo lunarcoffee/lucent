@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::fmt;
 
-use crate::http::consts;
+use crate::consts;
 use crate::http::request::Method;
 use crate::http::parser::{MessageParseResult, MessageParseError};
 use crate::util;

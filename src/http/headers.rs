@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fmt;
 
-use crate::http::consts;
+use crate::consts;
 use crate::util;
 
 const MULTI_VALUE_HEADER_NAMES: &[&str] = &[

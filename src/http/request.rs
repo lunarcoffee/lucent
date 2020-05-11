@@ -62,6 +62,7 @@ pub struct Request {
     pub http_version: HttpVersion,
     pub headers: Headers,
     pub body: Option<Vec<u8>>,
+    pub chunked: bool,
 }
 
 impl Request {
@@ -81,6 +82,10 @@ impl Message for Request {
 
     fn get_body_mut(&mut self) -> &mut Option<Vec<u8>> {
         &mut self.body
+    }
+
+    fn set_chunked(&mut self) {
+        self.chunked = true;
     }
 
     fn into_bytes(self) -> Vec<u8> {

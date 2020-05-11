@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use crate::http::headers::Headers;
-use crate::http::consts;
+use crate::consts;
 use crate::util;
 use crate::http::response::Status;
 use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
@@ -32,7 +32,7 @@ impl ConditionalChecker<'_, '_> {
         } else if !self.check_negative_headers() {
             Err(MiddlewareOutput::Status(Status::NotModified, false))
         } else if !self.check_range_header() {
-            Err(MiddlewareOutput::Status(Status::Ok, false)) // TODO
+            Err(MiddlewareOutput::Status(Status::Ok, false))
         } else {
             Ok(())
         }
@@ -73,7 +73,21 @@ impl ConditionalChecker<'_, '_> {
     }
 
     fn check_range_header(&self) -> bool {
-        // TODO:
+        if !self.headers.contains(consts::H_RANGE) {
+            return true;
+        }
+        if let Some(etag_or_date) = self.headers.get(consts::H_IF_RANGE) {
+            let etag_or_date = &etag_or_date[0];
+            if let Some(since) = util::parse_time_imf(etag_or_date) {
+                if let Some(last_modified) = self.info.last_modified {
+                    return last_modified <= since;
+                }
+            } else if etag_or_date.starts_with("\"") && etag_or_date.ends_with("\"") {
+                if let Some(etag) = &self.info.etag {
+                    return etag_or_date == etag;
+                }
+            }
+        }
         true
     }
 }

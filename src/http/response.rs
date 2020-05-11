@@ -23,7 +23,7 @@ pub enum Status {
     _NonAuthoritativeInformation,
     NoContent,
     _ResetContent,
-    _PartialContent,
+    PartialContent,
     _MultiStatus,
     _AlreadyReported,
     _MultipleChoices = 300,
@@ -50,7 +50,7 @@ pub enum Status {
     PayloadTooLarge,
     UriTooLong,
     _UnsupportedMediaType,
-    _UnsatisfiableRange,
+    UnsatisfiableRange,
     ExpectationFailed,
     _ImATeapot,
     _MisdirectedRequest = 421,
@@ -87,6 +87,7 @@ pub struct Response {
     pub status: Status,
     pub headers: Headers,
     pub body: Option<Vec<u8>>,
+    pub chunked: bool,
 }
 
 impl Response {
@@ -106,6 +107,10 @@ impl Message for Response {
 
     fn get_body_mut(&mut self) -> &mut Option<Vec<u8>> {
         &mut self.body
+    }
+
+    fn set_chunked(&mut self) {
+        self.chunked = true;
     }
 
     fn into_bytes(self) -> Vec<u8> {

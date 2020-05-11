@@ -5,7 +5,8 @@ use crate::http::uri::Uri;
 use async_std::io::prelude::BufReadExt;
 use crate::http::headers::Headers;
 use std::collections::HashMap;
-use crate::http::{consts, headers};
+use crate::http::headers;
+use crate::consts;
 use crate::http::response::{Status, Response};
 use futures::AsyncReadExt;
 use async_std::{prelude::Future, io};
@@ -57,15 +58,28 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         let headers = self.parse_headers(true).await?;
         let body = self.parse_body(&headers).await?;
 
-        Ok(Request { method, uri, http_version, headers, body })
+        Ok(Request {
+            method,
+            uri,
+            http_version,
+            headers,
+            body,
+            chunked: false,
+        })
     }
 
     pub async fn parse_response(&mut self) -> MessageParseResult<Response> {
-        let (version, status) = self.parse_status_line().await?;
+        let (http_version, status) = self.parse_status_line().await?;
         let headers = self.parse_headers(false).await?;
         let body = self.parse_body(&headers).await?;
 
-        Ok(Response { http_version: version, status, headers, body })
+        Ok(Response {
+            http_version,
+            status,
+            headers,
+            body,
+            chunked: false,
+        })
     }
 
     async fn parse_request_line(&mut self) -> MessageParseResult<(Method, Uri, HttpVersion)> {
