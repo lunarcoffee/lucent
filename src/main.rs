@@ -1,9 +1,8 @@
-use std::{env, fs};
+use std::env;
 
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
-use crate::server::templates::{Template, TemplateSubstitution};
-use std::collections::HashMap;
+use crate::server::config_loader::Config;
 
 mod server;
 mod log;
@@ -13,20 +12,21 @@ mod consts;
 
 #[async_std::main]
 async fn main() {
-    let args = env::args().collect::<Vec<_>>();
-    if args.len() != 3 && args.len() != 4 {
-        println!("usage: {} <file root> <template root> [host]", args[0]);
+    let mut args = env::args();
+    if args.len() != 2 {
+        println!("usage: {} <config path>", args.next().unwrap());
         return;
     }
 
-    let fallback_address = &"0.0.0.0:80".to_string();
-    let address = args.get(3).unwrap_or(fallback_address);
+    let config = match Config::load(&args.nth(1).unwrap()).await {
+        Some(config) => config,
+        _ => log::fatal("Configuration file invalid, or missing settings!"),
+    };
 
-    match FileServer::new(&args[1], &args[2], address).await {
+    match FileServer::new(config).await {
         Ok(server) => server.start(),
-        Err(FileServerStartError::InvalidTemplates) =>
-            log::fatal("Either the template root is invalid, or it is missing some templates!"),
-        Err(FileServerStartError::FileRootInvalid) => log::fatal("The file root is invalid!"),
-        _ => log::fatal("Cannot not bind to that address!"),
+        Err(FileServerStartError::InvalidFileRoot) => log::fatal("File directory invalid!"),
+        Err(FileServerStartError::InvalidTemplates) => log::fatal("Template directory invalid, or missing templates!"),
+        _ => log::fatal("Cannot not bind to that address! Do I need root?"),
     }
 }

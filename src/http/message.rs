@@ -145,7 +145,7 @@ impl<M: Message> MessageBuilder<M> {
     }
 }
 
-pub async fn send(writer: &mut (impl Write + Unpin), mut message: impl Message) -> io::Result<()> {
+pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> io::Result<()> {
     if message.is_chunked() {
         io::timeout(consts::MAX_WRITE_TIMEOUT, async {
             writer.write_all(&message.to_bytes_no_body()).await?;
@@ -156,13 +156,13 @@ pub async fn send(writer: &mut (impl Write + Unpin), mut message: impl Message) 
             for chunk in body.chunks(consts::CHUNK_SIZE) {
                 let size = format!("{:x}\r\n", chunk.len()).into_bytes();
                 io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-                    writer.write(&size).await;
-                    writer.write(chunk).await;
+                    writer.write(&size).await?;
+                    writer.write(chunk).await?;
                     writer.write(b"\r\n").await
                 }).await?;
             }
             io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-                writer.write(b"0\r\n\r\n").await;
+                writer.write(b"0\r\n\r\n").await?;
                 writer.flush().await
             }).await?;
         }

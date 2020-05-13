@@ -1,5 +1,4 @@
 use crate::server::templates::Template;
-use async_std::path::Path;
 use async_std::fs;
 use crate::consts;
 

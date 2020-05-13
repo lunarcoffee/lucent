@@ -13,19 +13,18 @@ use crate::server::Server;
 use crate::server::response_gen::ResponseGenerator;
 use crate::server::request_verifier::RequestVerifier;
 use crate::server::middleware::OutputProcessor;
-use crate::server::templates::Template;
-use std::collections::HashMap;
 use crate::server::templates::template_container::TemplateContainer;
+use crate::server::config_loader::Config;
 
 #[derive(Copy, Clone, Debug)]
 pub enum FileServerStartError {
-    FileRootInvalid,
+    InvalidFileRoot,
     InvalidTemplates,
     CannotBindAddress,
 }
 
 pub struct FileServer {
-    file_root: String,
+    config: Config,
     templates: TemplateContainer,
 
     listener: TcpListener,
@@ -34,22 +33,23 @@ pub struct FileServer {
 }
 
 impl FileServer {
-    pub async fn new(file_root: &str, template_root: &str, address: &str) -> Result<Self, FileServerStartError> {
-        let file_root = file_root.trim_end_matches('/').to_string();
-        let templates = TemplateContainer::new(template_root.trim_end_matches('/').to_string()).await
+    pub async fn new(config: Config) -> Result<Self, FileServerStartError> {
+        let file_root = config.file_root.trim_end_matches('/').to_string();
+        let templates = TemplateContainer::new(config.template_root.trim_end_matches('/').to_string())
+            .await
             .ok_or(FileServerStartError::InvalidTemplates)?;
 
         let (stop_sender, stop_receiver) = sync::channel(1);
-        let listener = match TcpListener::bind(address).await {
+        let listener = match TcpListener::bind(&config.address).await {
             Ok(listener) => listener,
             _ => return Err(FileServerStartError::CannotBindAddress),
         };
 
         if !Path::new(&file_root).is_dir().await {
-            Err(FileServerStartError::FileRootInvalid)
+            Err(FileServerStartError::InvalidFileRoot)
         } else {
             Ok(FileServer {
-                file_root,
+                config,
                 templates,
                 listener,
                 stop_sender,
@@ -66,9 +66,9 @@ impl FileServer {
                 stream = incoming.next().fuse() => match stream {
                     Some(stream) => {
                         let stream = stream?;
-                        let file_root = self.file_root.clone();
+                        let config = self.config.clone();
                         let templates = self.templates.clone();
-                        task::spawn(Self::handle_incoming(stream, file_root, templates));
+                        task::spawn(Self::handle_incoming(stream, config, templates));
                     }
                     _ => break,
                 }
@@ -77,14 +77,14 @@ impl FileServer {
         Ok(())
     }
 
-    async fn handle_incoming(stream: TcpStream, file_root: String, templates: TemplateContainer) {
+    async fn handle_incoming(stream: TcpStream, config: Config, templates: TemplateContainer) {
         let mut reader = BufReader::new(&stream);
         let mut writer = BufWriter::new(&stream);
 
         while !match RequestVerifier::new(&mut reader, &mut writer).verify_request().await {
             Err(output) => OutputProcessor::new(&mut writer, &templates, None).process(output).await,
             Ok(request) => {
-                let responder_output = ResponseGenerator::new(&file_root, &templates, &request).get_response().await;
+                let responder_output = ResponseGenerator::new(&config, &templates, &request).get_response().await;
                 client_intends_to_close(&request) || match responder_output {
                     Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
                         .process(output)

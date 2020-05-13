@@ -6,7 +6,7 @@ use crate::consts;
 use crate::{util, log};
 use crate::http::message::MessageBuilder;
 use async_std::path::Path;
-use async_std::{fs, io};
+use async_std::fs;
 use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -14,9 +14,10 @@ use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::range_parser::{RangeParser, RangeBody};
 use crate::server::dir_lister::DirectoryLister;
 use crate::server::templates::template_container::TemplateContainer;
+use crate::server::config_loader::Config;
 
 pub struct ResponseGenerator<'a, 'b, 'c> {
-    file_root: &'a str,
+    config: &'a Config,
     templates: &'b TemplateContainer,
     request: &'c Request,
 
@@ -26,9 +27,9 @@ pub struct ResponseGenerator<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
-    pub fn new(file_root: &'a str, templates: &'b TemplateContainer, request: &'c Request) -> Self {
+    pub fn new(config: &'a Config, templates: &'b TemplateContainer, request: &'c Request) -> Self {
         ResponseGenerator {
-            file_root,
+            config,
             templates,
             request,
             response: MessageBuilder::<Response>::new(),
@@ -41,7 +42,8 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
         let is_head = self.request.method == Method::Head;
 
         let raw_target = &self.request.uri.to_string();
-        let target = format!("{}{}", &self.file_root, if raw_target == "/" { "/index.html" } else { raw_target });
+        let replaced_target = if raw_target == "/" { self.config.route_empty_to.as_str() } else { raw_target };
+        let target = format!("{}{}", &self.config.file_root, replaced_target);
         let file = match File::open(&target).await {
             Ok(file) => file,
             _ => return Err(MiddlewareOutput::Error(Status::NotFound, false)),
@@ -58,17 +60,17 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
         };
 
         if metadata.is_dir() {
-            self.media_type = consts::H_MEDIA_HTML.to_string();
             let target_trimmed = raw_target.trim_end_matches('/').to_string();
+            self.media_type = consts::H_MEDIA_HTML.to_string();
             self.body = DirectoryLister::new(&target_trimmed, &target, self.templates)
                 .get_listing_body()
                 .await?
                 .into_bytes();
         } else {
-            if !is_head {
-                self.body = fs::read(&target).await?;
-            }
             let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
+            if !is_head {
+                self.body = fs::read(&target).await?
+            }
             self.media_type = util::media_type_by_ext(file_ext).to_string();
             if can_send_range && !is_head {
                 if let Some(output) = self.get_range_body() {

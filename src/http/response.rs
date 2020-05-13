@@ -3,7 +3,6 @@ use async_std::io::prelude::Read;
 
 use crate::http::headers::Headers;
 use crate::http::request::HttpVersion;
-use crate::util;
 use async_std::io::{Write, BufReader, BufWriter};
 use std::fmt::{Display, Formatter};
 use std::fmt;

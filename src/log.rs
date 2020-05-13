@@ -3,7 +3,7 @@ use std::process;
 
 use crate::util;
 
-pub fn fatal(msg: impl Display) {
+pub fn fatal(msg: impl Display) -> ! {
     eprintln!("[ CRT ] [ {} ] {}", get_time_now_formatted(), msg);
     process::exit(1);
 }

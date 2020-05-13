@@ -8,7 +8,6 @@ use crate::http::headers::Headers;
 use crate::http::uri::Uri;
 use crate::http::parser::{MessageParser, MessageParseResult};
 use crate::http::message::Message;
-use crate::util;
 use crate::http::message;
 
 #[derive(Copy, Clone, PartialEq)]

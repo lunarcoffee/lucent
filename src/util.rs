@@ -3,9 +3,6 @@ use std::time::SystemTime;
 use chrono::{DateTime, Utc, Local};
 
 use crate::consts;
-use async_std::io::Write;
-use async_std::io::prelude::WriteExt;
-use async_std::io;
 
 pub fn get_time_utc() -> DateTime<Utc> {
     SystemTime::now().into()

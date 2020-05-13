@@ -1,5 +1,4 @@
 use crate::server::templates::{TemplatePart, Template};
-use std::ops::Index;
 
 pub struct TemplateParser {
     file: String,
@@ -14,7 +13,7 @@ impl TemplateParser {
         }
     }
 
-    pub fn parse(mut self) -> Option<Template> {
+    pub fn parse(self) -> Option<Template> {
         let parts = self.parse_parts()?;
         Some(Template { parts })
     }

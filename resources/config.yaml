@@ -1,0 +1,4 @@
+file_root: "resources/www"
+template_root: "resources/templates"
+address: "0.0.0.0:1440"
+route_empty_to: "/index.html"

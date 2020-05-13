@@ -1,12 +1,10 @@
-use async_std::fs::File;
 use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 use async_std::fs;
 use crate::http::response::Status;
 use futures::StreamExt;
-use crate::{consts, util};
+use crate::consts;
 use crate::server::templates::template_container::TemplateContainer;
 use async_std::fs::DirEntry;
-use std::collections::HashMap;
 use crate::server::templates::{TemplateSubstitution, SubstitutionMap};
 use std::time::{self, Duration};
 use chrono::{Utc, TimeZone};
