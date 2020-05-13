@@ -32,7 +32,7 @@ impl TemplateParser {
                     pos = end_index + 1;
                     TemplatePart::Placeholder(name)
                 }
-                '%' => {
+                '~' => {
                     let start_index = chars[pos..].iter().position(|c| *c == '[')? + pos;
                     let mut depth = 0;
                     let end_index = chars[start_index + 1..].iter().position(|c| {
@@ -50,7 +50,7 @@ impl TemplateParser {
                 _ => {
                     let start_of_next_part = chars[pos..]
                         .iter()
-                        .position(|c| *c == '[' || *c == '%')
+                        .position(|c| *c == '[' || *c == '~')
                         .unwrap_or(chars.len() - pos)
                         + pos;
                     let text = chars[pos..start_of_next_part].iter().collect();

@@ -47,8 +47,6 @@ impl FileServer {
 
         if !Path::new(&file_root).is_dir().await {
             Err(FileServerStartError::FileRootInvalid)
-        } else if !Path::new(&template_root).is_dir().await {
-            Err(FileServerStartError::InvalidTemplates)
         } else {
             Ok(FileServer {
                 file_root,
@@ -88,10 +86,10 @@ impl FileServer {
             Ok(request) => {
                 let responder_output = ResponseGenerator::new(&file_root, &templates, &request).get_response().await;
                 client_intends_to_close(&request) || match responder_output {
-                    Err(_) => true,
-                    Ok(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
+                    Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
                         .process(output)
                         .await,
+                    _ => true,
                 }
             }
         } {}

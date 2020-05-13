@@ -44,7 +44,7 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
         let files = files
             .into_iter()
             .map(|(f, _)| f)
-            .filter(|f| f.file_name() != consts::DIR_LISTING_VIEWABLE)
+            .filter(|f| !f.file_name().to_string_lossy().starts_with('.'))
             .collect();
 
         let body = match self.get_substituted_template(files, custom_message).await {
@@ -64,14 +64,15 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
         if let Some(parent_path) = Path::new(self.target).parent() {
             let parent = parent_path.to_string_lossy().trim_start_matches('/').to_string();
             let mut entry_sub = SubstitutionMap::new();
-            Self::insert_entry(&mut entry_sub, parent, "..".to_string(), String::new(), "-".to_string());
+            Self::insert_entry(&mut entry_sub, parent, "../".to_string(), String::new(), "-".to_string());
             entry_subs.push(entry_sub);
         }
 
         for file in files {
             let metadata = file.metadata().await.ok()?;
-            let name = file.file_name().to_string_lossy().to_string();
-            let path = format!("{}/{}", self.target.trim_start_matches('/'), &name);
+            let name = file.file_name().to_string_lossy().to_string() + if metadata.is_dir() { "/" } else { "" };
+            let path_root = self.target.trim_start_matches('/').to_string();
+            let path = format!("{}{}", if path_root.is_empty() { String::new() } else { path_root + "/" }, &name);
             let last_modified = Self::format_time(metadata.modified().ok()?.duration_since(time::UNIX_EPOCH).ok()?);
             let size = if metadata.is_file() { Self::format_readable_size(metadata.len()) } else { "-".to_string() };
 
