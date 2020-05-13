@@ -12,20 +12,24 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use crate::server::middleware::{MiddlewareOutput};
 use crate::server::range_parser::{RangeParser, RangeBody};
+use crate::server::dir_lister::DirectoryLister;
+use crate::server::templates::template_container::TemplateContainer;
 
-pub struct ResponseGenerator<'a, 'b> {
+pub struct ResponseGenerator<'a, 'b, 'c> {
     file_root: &'a str,
-    request: &'b Request,
+    templates: &'b TemplateContainer,
+    request: &'c Request,
 
     response: MessageBuilder<Response>,
     body: Vec<u8>,
     media_type: String,
 }
 
-impl<'a, 'b> ResponseGenerator<'a, 'b> {
-    pub fn new(file_root: &'a str, request: &'b Request) -> Self {
+impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
+    pub fn new(file_root: &'a str, templates: &'b TemplateContainer, request: &'c Request) -> Self {
         ResponseGenerator {
             file_root,
+            templates,
             request,
             response: MessageBuilder::<Response>::new(),
             body: vec![],
@@ -36,30 +40,39 @@ impl<'a, 'b> ResponseGenerator<'a, 'b> {
     pub async fn get_response(mut self) -> Result<MiddlewareOutput, io::Error> {
         let is_head = self.request.method == Method::Head;
 
-        let target = &self.request.uri.to_string();
-        let target = format!("{}{}", &self.file_root, if target == "/" { "/index.html" } else { target });
+        let raw_target = &self.request.uri.to_string().trim_end_matches('/').to_string();
+        let target = format!("{}{}", &self.file_root, if raw_target.is_empty() { "/index.html" } else { raw_target });
         let file = match File::open(&target).await {
             Ok(file) => file,
             _ => return Ok(MiddlewareOutput::Error(Status::NotFound, false)),
         };
 
-        let last_modified = Some(file.metadata().await?.modified()?.into());
+        let metadata = file.metadata().await?;
+        let last_modified = Some(metadata.modified()?.into());
         let etag = Some(Self::generate_etag(&last_modified.unwrap()));
         let info = ConditionalInformation::new(etag, last_modified);
         let can_send_range = match ConditionalChecker::new(&info, &self.request.headers).check() {
             Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
-            Err(output) => return Ok(output),
+            Err(output) if !metadata.is_dir() => return Ok(output),
             _ => true,
         };
 
-        if !is_head {
-            self.body = fs::read(&target).await?
-        }
-        let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
-        self.media_type = util::media_type_by_ext(file_ext).to_string();
-        if can_send_range && !is_head {
-            if let Some(output) = self.get_range_body() {
-                return Ok(output);
+        if metadata.is_dir() {
+            self.media_type = consts::H_MEDIA_HTML.to_string();
+            self.body = match DirectoryLister::new(&raw_target, &target, self.templates).get_listing_body().await {
+                Ok(body) => body.into_bytes(),
+                Err(output) => return Ok(output),
+            };
+        } else {
+            if !is_head {
+                self.body = fs::read(&target).await?;
+            }
+            let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
+            self.media_type = util::media_type_by_ext(file_ext).to_string();
+            if can_send_range && !is_head {
+                if let Some(output) = self.get_range_body() {
+                    return Ok(output);
+                }
             }
         }
 

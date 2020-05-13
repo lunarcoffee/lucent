@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Index of [dir]</title>
+    <style>
+        th {
+            text-align: right;
+        }
+
+        .name {
+            width: 300px;
+            text-align: left;
+        }
+
+        .modified {
+            width: 200px;
+            text-align: right;
+        }
+
+        .size {
+            width: 200px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+<h1>Index of [dir]</h1>
+<br>
+<table>
+    <tr>
+        <th class="name">Name</th>
+        <th class="modified">Last modified</th>
+        <th class="size">Size</th>
+    </tr>
+    <tr>
+        <th colspan="3">
+            <hr>
+        </th>
+    </tr>
+    %entries[
+    <tr>
+        <td class="name"><a href="/[path]">[name]</a></td>
+        <td class="modified">[last_modified]</td>
+        <td class="size">[size]</td>
+    </tr>
+    ]
+    <tr>
+        <th colspan="3">
+            <hr>
+        </th>
+    </tr>
+</table>
+<p>[custom_message]</p>
+</body>
+</html>

@@ -7,6 +7,9 @@ use crate::log;
 use async_std::path::Path;
 use crate::consts;
 use crate::http::message::{MessageBuilder, Message};
+use crate::server::templates::template_container::TemplateContainer;
+use std::collections::HashMap;
+use crate::server::templates::{TemplateSubstitution, SubstitutionMap};
 
 pub enum MiddlewareOutput {
     Error(Status, bool),
@@ -25,13 +28,13 @@ pub type MiddlewareResult<T> = Result<T, MiddlewareOutput>;
 
 pub struct OutputProcessor<'a, 'b, 'c, W: Write + Unpin> {
     writer: &'a mut W,
-    template_root: &'b str,
+    templates: &'b TemplateContainer,
     request: Option<&'c Request>,
 }
 
 impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
-    pub fn new(writer: &'a mut W, template_root: &'b str, request: Option<&'c Request>) -> Self {
-        OutputProcessor { writer, template_root, request }
+    pub fn new(writer: &'a mut W, templates: &'b TemplateContainer, request: Option<&'c Request>) -> Self {
+        OutputProcessor { writer, templates, request }
     }
 
     pub async fn process(&mut self, output: MiddlewareOutput) -> bool {
@@ -46,19 +49,10 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
     async fn respond_error(&mut self, status: Status, close: bool) -> bool {
         self.log_request(status);
 
-        let error_file = format!("{}/error.html", self.template_root);
-        let body = if !Path::new(&error_file).is_file().await {
-            return true;
-        } else {
-            let status = status.to_string();
-            match fs::read_to_string(&error_file).await {
-                Ok(file) => file
-                    .replace("{server}", consts::SERVER_NAME_VERSION)
-                    .replace("{status}", &status)
-                    .into_bytes(),
-                _ => return true,
-            }
-        };
+        let mut sub = SubstitutionMap::new();
+        sub.insert("server".to_string(), TemplateSubstitution::Single(consts::SERVER_NAME_VERSION.to_string()));
+        sub.insert("status".to_string(), TemplateSubstitution::Single(status.to_string()));
+        let body = self.templates.error.substitute(&sub).unwrap().into_bytes();
 
         let mut response = MessageBuilder::<Response>::new();
         if close {

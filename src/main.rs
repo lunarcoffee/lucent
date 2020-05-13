@@ -1,7 +1,9 @@
-use std::env;
+use std::{env, fs};
 
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
+use crate::server::templates::{Template, TemplateSubstitution};
+use std::collections::HashMap;
 
 mod server;
 mod log;
@@ -22,8 +24,9 @@ async fn main() {
 
     match FileServer::new(&args[1], &args[2], address).await {
         Ok(server) => server.start(),
-        Err(FileServerStartError::FileRootInvalid) => log::fatal("File root invalid or not a directory!"),
-        Err(FileServerStartError::TemplateRootInvalid) => log::fatal("Template root invalid or not a directory!"),
-        _ => log::fatal("Could not bind to that address!"),
+        Err(FileServerStartError::InvalidTemplates) =>
+            log::fatal("Either the template root is invalid, or it is missing some templates!"),
+        Err(FileServerStartError::FileRootInvalid) => log::fatal("The file root is invalid!"),
+        _ => log::fatal("Cannot not bind to that address!"),
     }
 }

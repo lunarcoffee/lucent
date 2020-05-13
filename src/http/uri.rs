@@ -161,7 +161,7 @@ impl UriParser<'_, '_> {
             return Self::uri_error();
         }
         path = path.into_iter().skip(1).map(|s| s.to_string()).collect();
-        if path.iter().any(|part| part.is_empty() || part.chars().any(|c| !is_path_char(c))) {
+        if path.iter().any(|part| part.is_empty() || part.chars().any(|c| !is_path_char(c)) || part == "..") {
             return Self::uri_error();
         }
         let old_len = path.len();

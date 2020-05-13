@@ -13,6 +13,10 @@ pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub const MAX_BODY_BEFORE_CHUNK: usize = 8_192;
 pub const CHUNK_SIZE: usize = 4_096;
+pub const DIR_LISTING_VIEWABLE: &str = ".viewable";
+
+pub const TEMPLATE_ERROR: &str = "error.html";
+pub const TEMPLATE_DIR_LISTING: &str = "dir_listing.html";
 
 pub const H_ACCEPT: &str = "accept";
 pub const H_ACCEPT_CHARSET: &str = "accept-charset";
