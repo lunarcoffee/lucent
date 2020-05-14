@@ -1,5 +1,4 @@
 use crate::http::response::{Status, Response};
-use std::error;
 use async_std::io::Write;
 use crate::http::request::{Request, Method};
 use crate::log;
@@ -7,21 +6,7 @@ use crate::consts;
 use crate::http::message::MessageBuilder;
 use crate::server::templates::template_container::TemplateContainer;
 use crate::server::templates::{TemplateSubstitution, SubstitutionMap};
-
-pub enum MiddlewareOutput {
-    Error(Status, bool),
-    Status(Status, bool),
-    Response(Response, bool),
-    Terminate,
-}
-
-impl<T: error::Error> From<T> for MiddlewareOutput {
-    fn from(_: T) -> Self {
-        MiddlewareOutput::Terminate
-    }
-}
-
-pub type MiddlewareResult<T> = Result<T, MiddlewareOutput>;
+use crate::server::middleware::MiddlewareOutput;
 
 pub struct OutputProcessor<'a, 'b, 'c, W: Write + Unpin> {
     writer: &'a mut W,

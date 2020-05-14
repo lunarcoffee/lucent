@@ -1,7 +1,7 @@
 use crate::http::request::{Request, Method};
 use async_std::fs::File;
 use crate::http::response::{Status, Response};
-use crate::server::cond_checker::{ConditionalInformation, ConditionalChecker};
+use crate::server::middleware::cond_checker::{ConditionalInformation, ConditionalChecker};
 use crate::consts;
 use crate::{util, log};
 use crate::http::message::MessageBuilder;
@@ -11,8 +11,8 @@ use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::server::range_parser::{RangeParser, RangeBody};
-use crate::server::dir_lister::DirectoryLister;
+use crate::server::middleware::range_parser::{RangeParser, RangeBody};
+use crate::server::middleware::dir_lister::DirectoryLister;
 use crate::server::templates::template_container::TemplateContainer;
 use crate::server::config_loader::Config;
 

@@ -10,9 +10,9 @@ use crate::log;
 use crate::consts;
 use crate::http::request::{Request, HttpVersion};
 use crate::server::Server;
-use crate::server::response_gen::ResponseGenerator;
-use crate::server::request_verifier::RequestVerifier;
-use crate::server::middleware::OutputProcessor;
+use crate::server::middleware::response_gen::ResponseGenerator;
+use crate::server::middleware::request_verifier::RequestVerifier;
+use crate::server::middleware::output_processor::OutputProcessor;
 use crate::server::templates::template_container::TemplateContainer;
 use crate::server::config_loader::Config;
 
