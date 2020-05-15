@@ -94,17 +94,19 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             let path = Path::new(&self.target);
             let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-            if let Some(name) = path.file_name() {
-                if name.to_string_lossy().ends_with(&format!("_cgi.{}", file_ext)) {
-                    CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config).get_response().await?;
-                }
-            } else {
-                self.media_type = util::media_type_by_ext(file_ext).to_string();
-                if !is_head {
-                    self.body = fs::read(&self.target).await?;
-                    if can_send_range {
-                        self.set_range_body()?;
-                    }
+            if self.target.ends_with(&format!("_cgi.{}", file_ext)) {
+                let is_nph = self.target.ends_with(&format!("_nph_cgi.{}", file_ext));
+                let raw_bytes = CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config, is_nph)
+                    .get_response()
+                    .await?;
+                return Err(MiddlewareOutput::Bytes(raw_bytes, true));
+            }
+
+            self.media_type = util::media_type_by_ext(file_ext).to_string();
+            if !is_head {
+                self.body = fs::read(&self.target).await?;
+                if can_send_range {
+                    self.set_range_body()?;
                 }
             }
         }

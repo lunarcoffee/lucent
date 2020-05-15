@@ -13,6 +13,7 @@ pub enum MiddlewareOutput {
     Error(Status, bool),
     Status(Status, bool),
     Response(Response, bool),
+    Bytes(Vec<u8>, bool),
     Terminate,
 }
 

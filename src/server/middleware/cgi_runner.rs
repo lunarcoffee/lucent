@@ -10,7 +10,10 @@ use async_std::process::Output;
 use std::io::Write;
 use crate::server::config_loader::Config;
 use async_std::path::Path;
+use async_std::io;
+use futures::AsyncWriteExt;
 
+pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];
 pub const CGI_VARS: &[&str] = &[
     consts::CGI_VAR_AUTH_TYPE, consts::CGI_VAR_CONTENT_LENGTH, consts::CGI_VAR_CONTENT_TYPE,
     consts::CGI_VAR_GATEWAY_INTERFACE, consts::CGI_VAR_PATH_INFO, consts::CGI_VAR_PATH_TRANSLATED,
@@ -25,15 +28,25 @@ pub struct CgiRunner<'a, 'b, 'c, 'd> {
     request: &'b Request,
     conn_info: &'c ConnInfo,
     config: &'d Config,
+    is_nph: bool,
 }
 
 impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
-    pub fn new(script_path: &'a str, request: &'b Request, conn_info: &'c ConnInfo, config: &'d Config) -> Self {
-        CgiRunner { script_path, request, conn_info, config }
+    pub fn new(path: &'a str, request: &'b Request, conn: &'c ConnInfo, config: &'d Config, is_nph: bool) -> Self {
+        CgiRunner {
+            script_path: path,
+            request,
+            conn_info: conn,
+            config,
+            is_nph,
+        }
     }
 
-    pub async fn get_response(&self) -> MiddlewareResult<()> {
+    pub async fn get_response(&self) -> MiddlewareResult<Vec<u8>> {
         match self.get_script_output().await {
+            Some(output) if output.status.success() && self.is_nph => return Ok(output.stdout),
+            Some(output) if output.status.success() && output.stdout.is_empty() =>
+                log::warn(format!("CGI script `{}` returned empty response!", self.script_path)),
             Some(output) if output.status.success() => {
                 let mut res = format!("{} {} \r\n", HttpVersion::Http11, Status::Ok).into_bytes();
                 let out = Self::replace_crlf_nl(output.stdout);
@@ -45,7 +58,10 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
                     _ => Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
                 };
             }
-            Some(_) => log::warn(format!("Error in execution of CGI script `{}`!", self.script_path)),
+            Some(output) => {
+                log::warn(format!("Error in execution of CGI script `{}`!", self.script_path));
+                io::stdout().write_all(&output.stderr).await?;
+            }
             _ => {}
         }
         Err(MiddlewareOutput::Error(Status::InternalServerError, false))
@@ -77,15 +93,22 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
             }
         };
 
-        let mut script = Command::new(command)
+        let mut command = Command::new(command);
+        let script = command
             .arg(self.script_path)
             .envs(CGI_VARS.iter().zip(cgi_var_values))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .ok()?;
+            .stderr(Stdio::piped());
 
+        for (header_name, header_values) in self.request.headers.get_all() {
+            if !VAR_EXCLUDED_HEADERS.contains(&&**header_name) {
+                let env_var_name = "HTTP_".to_string() + &header_name.to_ascii_uppercase().replace('_', "-");
+                script.env(&env_var_name, header_values.join(", "));
+            }
+        }
+
+        let mut script = script.spawn().ok()?;
         &script.stdin.as_mut()?.write(&self.request.to_bytes_no_body()).ok()?;
         script.wait_with_output().ok()
     }

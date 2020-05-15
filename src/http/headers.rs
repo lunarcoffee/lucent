@@ -10,8 +10,10 @@ const MULTI_VALUE_HEADER_NAMES: &[&str] = &[
     consts::H_CACHE_CONTROL, consts::H_TE, consts::H_TRANSFER_ENCODING, consts::H_UPGRADE, consts::H_VIA,
 ];
 
+type HeaderMap = HashMap<String, Vec<String>>;
+
 pub struct Headers {
-    headers: HashMap<String, Vec<String>>,
+    headers: HeaderMap,
 }
 
 impl Headers {
@@ -21,6 +23,10 @@ impl Headers {
 
     pub fn get(&self, name: &str) -> Option<&Vec<String>> {
         self.headers.get(&Self::normalize_header_name(name))
+    }
+
+    pub fn get_all(&self) -> &HeaderMap {
+        &self.headers
     }
 
     pub fn contains(&self, name: &str) -> bool {

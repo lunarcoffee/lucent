@@ -1,5 +1,5 @@
 use crate::http::response::{Status, Response};
-use async_std::io::Write;
+use async_std::io::{self, Write};
 use crate::http::request::{Request, Method};
 use crate::log;
 use crate::consts;
@@ -7,6 +7,7 @@ use crate::http::message::MessageBuilder;
 use crate::server::template::templates::Templates;
 use crate::server::template::{TemplateSubstitution, SubstitutionMap};
 use crate::server::middleware::MiddlewareOutput;
+use async_std::io::prelude::WriteExt;
 
 pub struct OutputProcessor<'a, 'b, 'c, W: Write + Unpin> {
     writer: &'a mut W,
@@ -24,6 +25,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
             MiddlewareOutput::Error(status, close) => self.respond_error(status, close).await,
             MiddlewareOutput::Status(status, close) => self.respond_status(status, close).await,
             MiddlewareOutput::Response(response, close) => self.respond_response(response, close).await,
+            MiddlewareOutput::Bytes(bytes, close) => self.respond_bytes(bytes, close).await,
             _ => true,
         }
     }
@@ -62,6 +64,13 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
 
     async fn respond_response(&mut self, response: Response, close: bool) -> bool {
         response.send(self.writer).await.is_err() || close
+    }
+
+    async fn respond_bytes(&mut self, bytes: Vec<u8>, close: bool) -> bool {
+        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+            self.writer.write_all(&bytes).await?;
+            self.writer.flush().await
+        }).await.is_err() || close
     }
 
     fn log_request(&self, status: Status) {
