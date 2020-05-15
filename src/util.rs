@@ -29,6 +29,7 @@ pub fn media_type_by_ext(ext: &str) -> &str {
         "aac" => consts::H_MEDIA_AAC,
         "avi" => consts::H_MEDIA_AVI,
         "bmp" => consts::H_MEDIA_BITMAP,
+        "cgi" => consts::H_MEDIA_CGI_SCRIPT,
         "css" => consts::H_MEDIA_CSS,
         "csv" => consts::H_MEDIA_CSV,
         "epub" => consts::H_MEDIA_EPUB,

@@ -1,5 +1,5 @@
 use crate::http::request::{Request, Method};
-use async_std::fs::File;
+use async_std::fs::{File, Metadata};
 use crate::http::response::{Status, Response};
 use crate::server::middleware::cond_checker::{ConditionalInformation, ConditionalChecker};
 use crate::consts;
@@ -13,13 +13,18 @@ use std::hash::{Hash, Hasher};
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::middleware::range_parser::{RangeParser, RangeBody};
 use crate::server::middleware::dir_lister::DirectoryLister;
-use crate::server::templates::template_container::TemplateContainer;
+use crate::server::template::templates::Templates;
 use crate::server::config_loader::Config;
+use crate::server::file_server::ConnInfo;
+use crate::server::middleware::cgi_runner::CgiRunner;
 
 pub struct ResponseGenerator<'a, 'b, 'c> {
-    config: &'a Config,
-    templates: &'b TemplateContainer,
-    request: &'c Request,
+    templates: &'a Templates,
+
+    request: &'b Request,
+    conn_info: &'c ConnInfo,
+    raw_target: String,
+    target: String,
 
     response: MessageBuilder<Response>,
     body: Vec<u8>,
@@ -27,11 +32,17 @@ pub struct ResponseGenerator<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
-    pub fn new(config: &'a Config, templates: &'b TemplateContainer, request: &'c Request) -> Self {
+    pub fn new(config: &Config, templates: &'a Templates, request: &'b Request, conn_info: &'c ConnInfo) -> Self {
+        let raw_target = request.uri.to_string();
+        let replaced_target = if raw_target == "/" { config.route_empty_to.as_str() } else { raw_target.as_str() };
+        let target = format!("{}{}", &config.file_root, replaced_target);
+
         ResponseGenerator {
-            config,
             templates,
             request,
+            conn_info,
+            raw_target,
+            target,
             response: MessageBuilder::<Response>::new(),
             body: vec![],
             media_type: consts::H_MEDIA_BINARY.to_string(),
@@ -39,12 +50,7 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
     }
 
     pub async fn get_response(mut self) -> MiddlewareResult<()> {
-        let is_head = self.request.method == Method::Head;
-
-        let raw_target = &self.request.uri.to_string();
-        let replaced_target = if raw_target == "/" { self.config.route_empty_to.as_str() } else { raw_target };
-        let target = format!("{}{}", &self.config.file_root, replaced_target);
-        let file = match File::open(&target).await {
+        let file = match File::open(&self.target).await {
             Ok(file) => file,
             _ => return Err(MiddlewareOutput::Error(Status::NotFound, false)),
         };
@@ -53,31 +59,7 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
         let last_modified = Some(metadata.modified()?.into());
         let etag = Some(Self::generate_etag(&last_modified.unwrap()));
         let info = ConditionalInformation::new(etag, last_modified);
-        let can_send_range = match ConditionalChecker::new(&info, &self.request.headers).check() {
-            Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
-            Err(output) if !metadata.is_dir() => return Err(output),
-            _ => true,
-        };
-
-        if metadata.is_dir() {
-            let target_trimmed = raw_target.trim_end_matches('/').to_string();
-            self.media_type = consts::H_MEDIA_HTML.to_string();
-            self.body = DirectoryLister::new(&target_trimmed, &target, self.templates)
-                .get_listing_body()
-                .await?
-                .into_bytes();
-        } else {
-            let file_ext = Path::new(&target).extension().and_then(|s| s.to_str()).unwrap_or("");
-            if !is_head {
-                self.body = fs::read(&target).await?
-            }
-            self.media_type = util::media_type_by_ext(file_ext).to_string();
-            if can_send_range && !is_head {
-                if let Some(output) = self.get_range_body() {
-                    return Err(output);
-                }
-            }
-        }
+        self.set_body(&info, &metadata).await?;
 
         let response = self
             .response
@@ -90,9 +72,45 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
         Err(MiddlewareOutput::Response(response, false))
     }
 
-    fn get_range_body(&mut self) -> Option<MiddlewareOutput> {
+    async fn set_body(&mut self, info: &ConditionalInformation, metadata: &Metadata) -> MiddlewareResult<()> {
+        let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
+            Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
+            Err(output) if !metadata.is_dir() => return Err(output),
+            _ => true,
+        };
+
+        let is_head = self.request.method == Method::Head;
+        if metadata.is_dir() {
+            let target_trimmed = self.raw_target.trim_end_matches('/').to_string();
+            self.media_type = consts::H_MEDIA_HTML.to_string();
+            self.body = DirectoryLister::new(&target_trimmed, &self.target, self.templates)
+                .get_listing_body()
+                .await?
+                .into_bytes();
+        } else {
+            let path = Path::new(&self.target);
+            let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+            if let Some(name) = path.file_name() {
+                if name.to_string_lossy().ends_with(&format!("_cgi.{}", file_ext)) {
+                    CgiRunner::new(&self.target, &self.request, &self.conn_info).get_response().await?;
+                }
+            } else {
+                self.media_type = util::media_type_by_ext(file_ext).to_string();
+                if !is_head {
+                    self.body = fs::read(&self.target).await?;
+                    if can_send_range {
+                        self.set_range_body()?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn set_range_body(&mut self) -> MiddlewareResult<()> {
         match RangeParser::new(&self.request.headers, &self.body, &self.media_type).get_body() {
-            Err(output) => return Some(output),
+            Err(output) => return Err(output),
             Ok(RangeBody::Range(body, content_range)) => {
                 self.body = body;
                 self.response.set_header(consts::H_CONTENT_RANGE, &content_range);
@@ -105,7 +123,7 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
             }
             _ => {}
         }
-        None
+        Ok(())
     }
 
     fn generate_etag(modified: &DateTime<Utc>) -> String {

@@ -4,18 +4,18 @@ use crate::http::request::{Request, Method};
 use crate::log;
 use crate::consts;
 use crate::http::message::MessageBuilder;
-use crate::server::templates::template_container::TemplateContainer;
-use crate::server::templates::{TemplateSubstitution, SubstitutionMap};
+use crate::server::template::templates::Templates;
+use crate::server::template::{TemplateSubstitution, SubstitutionMap};
 use crate::server::middleware::MiddlewareOutput;
 
 pub struct OutputProcessor<'a, 'b, 'c, W: Write + Unpin> {
     writer: &'a mut W,
-    templates: &'b TemplateContainer,
+    templates: &'b Templates,
     request: Option<&'c Request>,
 }
 
 impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
-    pub fn new(writer: &'a mut W, templates: &'b TemplateContainer, request: Option<&'c Request>) -> Self {
+    pub fn new(writer: &'a mut W, templates: &'b Templates, request: Option<&'c Request>) -> Self {
         OutputProcessor { writer, templates, request }
     }
 

@@ -1,4 +1,4 @@
-use crate::server::templates::{TemplatePart, Template};
+use crate::server::template::{TemplatePart, Template};
 
 pub struct TemplateParser {
     file: String,

@@ -1,14 +1,14 @@
-use crate::server::templates::Template;
+use crate::server::template::Template;
 use async_std::fs;
 use crate::consts;
 
 #[derive(Clone)]
-pub struct TemplateContainer {
+pub struct Templates {
     pub error: Template,
     pub dir_listing: Template,
 }
 
-impl TemplateContainer {
+impl Templates {
     pub async fn new(template_root: String) -> Option<Self> {
         let error_path = format!("{}/{}", template_root, consts::TEMPLATE_ERROR);
         let dir_listing_path = format!("{}/{}", template_root, consts::TEMPLATE_DIR_LISTING);
@@ -18,6 +18,6 @@ impl TemplateContainer {
 
         let error = Template::new(error_template)?;
         let dir_listing = Template::new(dir_listing_template)?;
-        Some(TemplateContainer { error, dir_listing })
+        Some(Templates { error, dir_listing })
     }
 }

@@ -8,9 +8,9 @@ use crate::http::parser::{MessageParseResult, MessageParseError};
 use crate::util;
 
 pub struct Authority {
-    user_info: Option<String>,
-    host: String,
-    port: Option<u16>,
+    pub user_info: Option<String>,
+    pub host: String,
+    pub port: Option<u16>,
 }
 
 impl Display for Authority {
@@ -22,24 +22,31 @@ impl Display for Authority {
 }
 
 pub struct AbsolutePath {
-    path: Vec<String>,
-    query: Option<HashMap<String, String>>,
+    pub path: Vec<String>,
+    pub query: Option<HashMap<String, String>>,
+}
+
+impl AbsolutePath {
+    pub fn path_as_string(&self) -> String {
+        self.path.join("/")
+    }
+
+    pub fn query_as_string(&self) -> String {
+        match &self.query {
+            Some(query) => query
+                .iter()
+                .map(|(name, value)| format!("{}={}", name, value))
+                .collect::<Vec<_>>()
+                .join("&"),
+            _ => String::new(),
+        }
+    }
 }
 
 impl Display for AbsolutePath {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let path_joined = self.path.join("/");
-        let query_joined = match &self.query {
-            Some(query) => {
-                let joined = query
-                    .iter()
-                    .map(|(name, value)| format!("{}={}", name, value))
-                    .collect::<Vec<_>>()
-                    .join("&");
-                format!("?{}", joined)
-            }
-            _ => String::new(),
-        };
+        let path_joined = self.path_as_string();
+        let query_joined = self.query_as_string();
         write!(f, "/{}{}", encode_percent(&path_joined), encode_percent(&query_joined))
     }
 }

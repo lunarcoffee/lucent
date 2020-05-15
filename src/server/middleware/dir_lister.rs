@@ -3,21 +3,21 @@ use async_std::fs;
 use crate::http::response::Status;
 use futures::StreamExt;
 use crate::consts;
-use crate::server::templates::template_container::TemplateContainer;
+use crate::server::template::templates::Templates;
 use async_std::fs::DirEntry;
-use crate::server::templates::{TemplateSubstitution, SubstitutionMap};
+use crate::server::template::{TemplateSubstitution, SubstitutionMap};
 use std::time::{self, Duration};
 use chrono::{Utc, TimeZone};
 use async_std::path::Path;
 
 pub struct DirectoryLister<'a, 'b, 'c> {
-    target: &'a String,
-    dir: &'b String,
-    templates: &'c TemplateContainer,
+    target: &'a str,
+    dir: &'b str,
+    templates: &'c Templates,
 }
 
 impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
-    pub fn new(target: &'a String, dir: &'b String, templates: &'c TemplateContainer) -> Self {
+    pub fn new(target: &'a str, dir: &'b str, templates: &'c Templates) -> Self {
         DirectoryLister { target, dir, templates }
     }
 

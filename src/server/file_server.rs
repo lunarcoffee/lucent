@@ -1,5 +1,5 @@
 use async_std::io::{self, BufReader, BufWriter};
-use async_std::net::{TcpListener, TcpStream};
+use async_std::net::{TcpListener, TcpStream, SocketAddr};
 use async_std::path::Path;
 use async_std::prelude::StreamExt;
 use async_std::sync::{self, Receiver, Sender};
@@ -13,8 +13,14 @@ use crate::server::Server;
 use crate::server::middleware::response_gen::ResponseGenerator;
 use crate::server::middleware::request_verifier::RequestVerifier;
 use crate::server::middleware::output_processor::OutputProcessor;
-use crate::server::templates::template_container::TemplateContainer;
+use crate::server::template::templates::Templates;
 use crate::server::config_loader::Config;
+use std::str::FromStr;
+
+pub struct ConnInfo {
+    pub(crate) remote_addr: SocketAddr,
+    pub(crate) local_addr: SocketAddr,
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum FileServerStartError {
@@ -25,7 +31,7 @@ pub enum FileServerStartError {
 
 pub struct FileServer {
     config: Config,
-    templates: TemplateContainer,
+    templates: Templates,
 
     listener: TcpListener,
     stop_sender: Sender<()>,
@@ -35,7 +41,7 @@ pub struct FileServer {
 impl FileServer {
     pub async fn new(config: Config) -> Result<Self, FileServerStartError> {
         let file_root = config.file_root.trim_end_matches('/').to_string();
-        let templates = TemplateContainer::new(config.template_root.trim_end_matches('/').to_string())
+        let templates = Templates::new(config.template_root.trim_end_matches('/').to_string())
             .await
             .ok_or(FileServerStartError::InvalidTemplates)?;
 
@@ -77,15 +83,19 @@ impl FileServer {
         Ok(())
     }
 
-    async fn handle_incoming(stream: TcpStream, config: Config, templates: TemplateContainer) {
+    async fn handle_incoming(stream: TcpStream, config: Config, templates: Templates) {
         let mut reader = BufReader::new(&stream);
         let mut writer = BufWriter::new(&stream);
+
+        let remote_addr = stream.peer_addr().unwrap_or(SocketAddr::from_str("0.0.0.0:80").unwrap());
+        let local_addr = stream.local_addr().unwrap_or(SocketAddr::from_str("127.0.0.1:80").unwrap());
+        let conn_info = ConnInfo { remote_addr, local_addr };
 
         while !match RequestVerifier::new(&mut reader, &mut writer).verify_request().await {
             Err(output) => OutputProcessor::new(&mut writer, &templates, None).process(output).await,
             Ok(request) => {
-                let responder_output = ResponseGenerator::new(&config, &templates, &request).get_response().await;
-                client_intends_to_close(&request) || match responder_output {
+                let output = ResponseGenerator::new(&config, &templates, &request, &conn_info).get_response().await;
+                client_intends_to_close(&request) || match output {
                     Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
                         .process(output)
                         .await,

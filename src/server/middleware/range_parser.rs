@@ -19,11 +19,11 @@ pub struct Range {
 pub struct RangeParser<'a, 'b, 'c> {
     headers: &'a Headers,
     body: &'b Vec<u8>,
-    media_type: &'c String,
+    media_type: &'c str,
 }
 
 impl<'a, 'b, 'c> RangeParser<'a, 'b, 'c> {
-    pub fn new(headers: &'a Headers, body: &'b Vec<u8>, media_type: &'c String) -> Self {
+    pub fn new(headers: &'a Headers, body: &'b Vec<u8>, media_type: &'c str) -> Self {
         RangeParser { headers, body, media_type }
     }
 

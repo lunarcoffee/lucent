@@ -7,6 +7,7 @@ pub mod response_gen;
 pub mod range_parser;
 pub mod cond_checker;
 pub mod dir_lister;
+pub mod cgi_runner;
 
 pub enum MiddlewareOutput {
     Error(Status, bool),
