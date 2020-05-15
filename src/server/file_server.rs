@@ -18,8 +18,8 @@ use crate::server::config_loader::Config;
 use std::str::FromStr;
 
 pub struct ConnInfo {
-    pub(crate) remote_addr: SocketAddr,
-    pub(crate) local_addr: SocketAddr,
+    pub remote_addr: SocketAddr,
+    pub local_addr: SocketAddr,
 }
 
 #[derive(Copy, Clone, Debug)]

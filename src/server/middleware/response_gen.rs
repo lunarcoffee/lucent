@@ -14,7 +14,7 @@ use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::middleware::range_parser::{RangeParser, RangeBody};
 use crate::server::middleware::dir_lister::DirectoryLister;
 use crate::server::template::templates::Templates;
-use crate::server::config_loader::Config;
+use crate::server::config_loader::{Config, RouteSpec};
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::cgi_runner::CgiRunner;
 
@@ -25,6 +25,7 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     request: &'c Request,
     conn_info: &'d ConnInfo,
     raw_target: String,
+    routed_target: String,
     target: String,
 
     response: MessageBuilder<Response>,
@@ -35,8 +36,8 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
 impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     pub fn new(config: &'a Config, templates: &'b Templates, request: &'c Request, conn_info: &'d ConnInfo) -> Self {
         let raw_target = request.uri.to_string();
-        let replaced_target = if raw_target == "/" { config.route_empty_to.as_str() } else { raw_target.as_str() };
-        let target = format!("{}{}", &config.file_root, replaced_target);
+        let routed_target = Self::route_raw_target(config, &raw_target).unwrap_or(raw_target.to_string());
+        let target = format!("{}{}", &config.file_root, &routed_target);
 
         ResponseGenerator {
             config,
@@ -44,6 +45,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             request,
             conn_info,
             raw_target,
+            routed_target,
             target,
             response: MessageBuilder::<Response>::new(),
             body: vec![],
@@ -70,7 +72,12 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             .with_body(self.body, &self.media_type)
             .build();
 
-        log::info(format!("({}) {} {}", response.status, &self.request.method, &self.request.uri));
+        let reroute = if self.raw_target != self.routed_target {
+            format!(" -> {}", self.routed_target)
+        } else {
+            String::new()
+        };
+        log::info(format!("({}) {} {}{}", response.status, &self.request.method, &self.raw_target, reroute));
         Err(MiddlewareOutput::Response(response, false))
     }
 
@@ -129,6 +136,18 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             _ => {}
         }
         Ok(())
+    }
+
+    fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
+        for (rule, replacement) in &config.routing_table {
+            match rule {
+                RouteSpec::Matches(path) if &raw_target == path => return Some(replacement.to_string()),
+                RouteSpec::StartsWith(path) if raw_target.starts_with(path) =>
+                    return Some(replacement.to_string() + &raw_target[path.len()..]),
+                _ => {}
+            }
+        }
+        None
     }
 
     fn generate_etag(modified: &DateTime<Utc>) -> String {

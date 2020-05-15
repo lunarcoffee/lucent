@@ -3,8 +3,11 @@ address: "0.0.0.0:1440"
 file_root: "resources/www"
 template_root: "resources/templates"
 
-route_empty_to: "/index.html"
-
 cgi_executors:
     py: "python3"
     pl: "perl"
+
+routing_table:
+    "@/": "/index.html"
+    "@/cgi": "/files/test_cgi.py"
+    "/calc": "/files/calc"
