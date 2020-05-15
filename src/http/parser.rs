@@ -135,7 +135,6 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
             return Err(MessageParseError::InvalidStatusCode);
         }
         let status = (buf[0] - b'0') as usize * 100 + (buf[1] - b'0') as usize * 10 + (buf[2] - b'0') as usize;
-        println!("{}", status);
         let status = match Status::try_from(status) {
             Ok(status) => status,
             _ => return Err(MessageParseError::InvalidStatusCode),

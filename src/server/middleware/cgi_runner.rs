@@ -2,12 +2,13 @@ use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 use crate::http::response::{Response, Status};
 use crate::http::message::Message;
 use std::process::{Command, Stdio};
-use crate::consts;
+use crate::{consts, log};
 use crate::http::request::{Request, HttpVersion};
 use crate::http::uri::Uri;
 use crate::server::file_server::ConnInfo;
 use async_std::process::Output;
 use std::io::Write;
+use crate::server::config_loader::Config;
 use async_std::path::Path;
 
 pub const CGI_VARS: &[&str] = &[
@@ -19,15 +20,16 @@ pub const CGI_VARS: &[&str] = &[
     consts::CGI_VAR_SERVER_PROTOCOL, consts::CGI_VAR_SERVER_SOFTWARE,
 ];
 
-pub struct CgiRunner<'a, 'b, 'c> {
+pub struct CgiRunner<'a, 'b, 'c, 'd> {
     script_path: &'a str,
     request: &'b Request,
     conn_info: &'c ConnInfo,
+    config: &'d Config,
 }
 
-impl<'a, 'b, 'c> CgiRunner<'a, 'b, 'c> {
-    pub fn new(script_path: &'a str, request: &'b Request, conn_info: &'c ConnInfo) -> Self {
-        CgiRunner { script_path, request, conn_info }
+impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
+    pub fn new(script_path: &'a str, request: &'b Request, conn_info: &'c ConnInfo, config: &'d Config) -> Self {
+        CgiRunner { script_path, request, conn_info, config }
     }
 
     pub async fn get_response(&self) -> MiddlewareResult<()> {
@@ -38,13 +40,15 @@ impl<'a, 'b, 'c> CgiRunner<'a, 'b, 'c> {
                 res.extend(out);
 
                 let mut null = vec![];
-                match Response::new(&mut res.as_slice(), &mut null).await {
+                return match Response::new(&mut res.as_slice(), &mut null).await {
                     Ok(response) => Err(MiddlewareOutput::Response(response, false)),
                     _ => Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
-                }
+                };
             }
-            _ => Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
+            Some(_) => log::warn(format!("Error in execution of CGI script `{}`!", self.script_path)),
+            _ => {}
         }
+        Err(MiddlewareOutput::Error(Status::InternalServerError, false))
     }
 
     async fn get_script_output(&self) -> Option<Output> {
@@ -65,11 +69,20 @@ impl<'a, 'b, 'c> CgiRunner<'a, 'b, 'c> {
             &HttpVersion::Http11.to_string(), consts::SERVER_NAME_VERSION,
         ];
 
-        let mut script = Command::new(self.command_by_extension()?)
+        let command = match self.command_by_extension() {
+            Ok(command) => command,
+            Err(ext) => {
+                log::warn(format!("No CGI script executor found for file extension `{}`!", ext));
+                return None;
+            }
+        };
+
+        let mut script = Command::new(command)
             .arg(self.script_path)
             .envs(CGI_VARS.iter().zip(cgi_var_values))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .ok()?;
 
@@ -91,13 +104,11 @@ impl<'a, 'b, 'c> CgiRunner<'a, 'b, 'c> {
         fixed
     }
 
-    fn command_by_extension(&self) -> Option<&str> {
-        let command = match &*Path::new(self.script_path).extension()?.to_string_lossy() {
-            "py" => "python3",
-            "pl" => "perl",
-            "rb" => "ruby",
-            _ => "bash",
-        };
-        Some(command)
+    fn command_by_extension(&self) -> Result<&str, &str> {
+        let ext = &*Path::new(self.script_path).extension().and_then(|s| s.to_str()).unwrap_or("");
+        match self.config.cgi_executors.get(ext) {
+            Some(command) => Ok(command),
+            _ => Err(ext),
+        }
     }
 }

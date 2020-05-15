@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use async_std::fs;
+use std::collections::HashMap;
 
 #[derive(Clone, Deserialize)]
 pub struct Config {
@@ -7,6 +8,7 @@ pub struct Config {
     pub template_root: String,
     pub address: String,
     pub route_empty_to: String,
+    pub cgi_executors: HashMap<String, String>,
 }
 
 impl Config {

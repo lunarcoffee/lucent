@@ -18,11 +18,12 @@ use crate::server::config_loader::Config;
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::cgi_runner::CgiRunner;
 
-pub struct ResponseGenerator<'a, 'b, 'c> {
-    templates: &'a Templates,
+pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
+    config: &'a Config,
+    templates: &'b Templates,
 
-    request: &'b Request,
-    conn_info: &'c ConnInfo,
+    request: &'c Request,
+    conn_info: &'d ConnInfo,
     raw_target: String,
     target: String,
 
@@ -31,13 +32,14 @@ pub struct ResponseGenerator<'a, 'b, 'c> {
     media_type: String,
 }
 
-impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
-    pub fn new(config: &Config, templates: &'a Templates, request: &'b Request, conn_info: &'c ConnInfo) -> Self {
+impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
+    pub fn new(config: &'a Config, templates: &'b Templates, request: &'c Request, conn_info: &'d ConnInfo) -> Self {
         let raw_target = request.uri.to_string();
         let replaced_target = if raw_target == "/" { config.route_empty_to.as_str() } else { raw_target.as_str() };
         let target = format!("{}{}", &config.file_root, replaced_target);
 
         ResponseGenerator {
+            config,
             templates,
             request,
             conn_info,
@@ -82,6 +84,7 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
         let is_head = self.request.method == Method::Head;
         if metadata.is_dir() {
             let target_trimmed = self.raw_target.trim_end_matches('/').to_string();
+
             self.media_type = consts::H_MEDIA_HTML.to_string();
             self.body = DirectoryLister::new(&target_trimmed, &self.target, self.templates)
                 .get_listing_body()
@@ -93,7 +96,7 @@ impl<'a, 'b, 'c> ResponseGenerator<'a, 'b, 'c> {
 
             if let Some(name) = path.file_name() {
                 if name.to_string_lossy().ends_with(&format!("_cgi.{}", file_ext)) {
-                    CgiRunner::new(&self.target, &self.request, &self.conn_info).get_response().await?;
+                    CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config).get_response().await?;
                 }
             } else {
                 self.media_type = util::media_type_by_ext(file_ext).to_string();
