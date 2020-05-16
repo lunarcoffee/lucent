@@ -105,6 +105,7 @@ fn convert_to_regex(route: &str, must_match_entire: bool) -> Regex {
         is_var = if c == '{' { true } else if c == '}' && is_var { false } else { is_var };
         (c, is_var || c == '}')
     });
+
     let chunked = partitioned.fold(Vec::<(String, bool)>::new(), |mut acc, (c, is_var)| {
         if is_var != acc.last().map(|c| c.1).unwrap_or(!is_var) {
             acc.push((c.to_string(), is_var));
@@ -116,8 +117,17 @@ fn convert_to_regex(route: &str, must_match_entire: bool) -> Regex {
 
     let mut regex_str = chunked
         .iter()
-        .map(|(s, is_var)| if *is_var { format!("(?P<{}>.+)", &s[1..s.len() - 1]) } else { regex::escape(s) })
+        .map(|(s, is_var)| (s.splitn(2, ':').collect::<Vec<_>>(), is_var))
+        .map(|(s, is_var)| if *is_var {
+            match s.len() {
+                1 => format!("(?P<{}>.+)", &s[0][1..s[0].len() - 1]),
+                _ =>  format!("(?P<{}>{})", &s[0][1..], s.get(1).map(|s| &s[..s.len() - 1]).unwrap_or(&".+")),
+            }
+        } else {
+            regex::escape(s[0])
+        })
         .collect::<String>();
+
     regex_str = if must_match_entire { format!("^{}$", regex_str) } else { format!("^{}", regex_str) };
     Regex::new(&regex_str).unwrap()
 }

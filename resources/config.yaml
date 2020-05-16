@@ -10,5 +10,6 @@ cgi_executors:
 routing_table:
     "@/": "/index.html"
     "@/cgi": "/files/test_cgi.py"
-    "/calc": "/files/calc"
-    "/{image_name}/img": "/files/images/[image_name].jpg"
+    "@/{image_name:[a-zA-Z]+}/img": "/files/images/[image_name].jpg"
+    "@/test/calc/pdfs/{pdf_name}": "/files/calc/[pdf_name].pdf"
+    "/test/calc": "/files/calc"

@@ -104,11 +104,13 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
                 .await?
                 .into_bytes();
         } else {
-            let path = Path::new(&self.target);
+            let target = &self.target;
+            let path = Path::new(target);
             let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            let target_no_ext = &target[..target.len() - file_ext.len() - 1];
 
-            if self.target.ends_with(&format!("_cgi.{}", file_ext)) {
-                let is_nph = self.target.ends_with(&format!("_nph_cgi.{}", file_ext));
+            if target_no_ext.ends_with("_cgi") {
+                let is_nph = target_no_ext.ends_with("_nph_cgi");
                 let raw_bytes = CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config, is_nph)
                     .get_response()
                     .await?;
@@ -145,16 +147,16 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     }
 
     fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
-        let mut sub = SubstitutionMap::new();
         for (RouteSpec(rule_regex), replacement) in &config.routing_table {
-            sub.clear();
             if let Some(capture) = rule_regex.captures(raw_target) {
-                for (capture, name) in capture.iter().skip(1).zip(rule_regex.capture_names().skip(1)) {
-                    for var in capture.iter() {
-                        sub.insert(name.unwrap().to_string(), TemplateSubstitution::Single(var.as_str().to_string()));
-                    }
-                }
-                return replacement.substitute(&sub);
+                let sub = capture.iter().zip(rule_regex.capture_names()).skip(1)
+                    .map(|(matches, name)| (matches.into_iter(), name.unwrap().to_string()))
+                    .flat_map(|(captures, name)| captures.map(move |c| (name.to_string(), c.as_str().to_string())))
+                    .map(|(name, var)| (name, TemplateSubstitution::Single(var)))
+                    .collect::<SubstitutionMap>();
+
+                let end_match = rule_regex.find(raw_target).unwrap().end();
+                return Some(replacement.substitute(&sub)? + &raw_target[end_match..]);
             }
         }
         None

@@ -112,6 +112,7 @@ impl FileServer {
 
 impl Server for FileServer {
     fn start(&self) {
+        log::info(format!("Starting server on {}.", self.listener.local_addr().unwrap()));
         if let Err(e) = task::block_on(self.main_loop()) {
             log::warn(format!("Unexpected error during normal operation: {}", e));
         }
