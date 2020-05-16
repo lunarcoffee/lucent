@@ -11,3 +11,4 @@ routing_table:
     "@/": "/index.html"
     "@/cgi": "/files/test_cgi.py"
     "/calc": "/files/calc"
+    "/{image_name}/img": "/files/images/[image_name].jpg"

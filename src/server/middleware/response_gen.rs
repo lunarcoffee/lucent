@@ -1,22 +1,26 @@
-use crate::http::request::{Request, Method};
-use async_std::fs::{File, Metadata};
-use crate::http::response::{Status, Response};
-use crate::server::middleware::cond_checker::{ConditionalInformation, ConditionalChecker};
-use crate::consts;
-use crate::{util, log};
-use crate::http::message::MessageBuilder;
-use async_std::path::Path;
-use async_std::fs;
-use chrono::{DateTime, Utc};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::server::middleware::range_parser::{RangeParser, RangeBody};
-use crate::server::middleware::dir_lister::DirectoryLister;
-use crate::server::template::templates::Templates;
+
+use async_std::fs::{File, Metadata};
+use async_std::fs;
+use async_std::path::Path;
+use chrono::{DateTime, Utc};
+
+use crate::{log, util};
+use crate::consts;
+use crate::http::message::MessageBuilder;
+use crate::http::request::{Method, Request};
+use crate::http::response::{Response, Status};
+use crate::http::uri::Uri;
 use crate::server::config_loader::{Config, RouteSpec};
 use crate::server::file_server::ConnInfo;
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::middleware::cgi_runner::CgiRunner;
+use crate::server::middleware::cond_checker::{ConditionalChecker, ConditionalInformation};
+use crate::server::middleware::dir_lister::DirectoryLister;
+use crate::server::middleware::range_parser::{RangeBody, RangeParser};
+use crate::server::template::{SubstitutionMap, TemplateSubstitution};
+use crate::server::template::templates::Templates;
 
 pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     config: &'a Config,
@@ -34,16 +38,19 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
 }
 
 impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
-    pub fn new(config: &'a Config, templates: &'b Templates, request: &'c Request, conn_info: &'d ConnInfo) -> Self {
+    pub fn new(config: &'a Config, templates: &'b Templates, request: &'c mut Request, conn: &'d ConnInfo) -> Self {
         let raw_target = request.uri.to_string();
         let routed_target = Self::route_raw_target(config, &raw_target).unwrap_or(raw_target.to_string());
         let target = format!("{}{}", &config.file_root, &routed_target);
+        if let Ok(uri) = Uri::from(&request.method, &routed_target) {
+            request.uri = uri;
+        }
 
         ResponseGenerator {
             config,
             templates,
             request,
-            conn_info,
+            conn_info: conn,
             raw_target,
             routed_target,
             target,
@@ -90,8 +97,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
         let is_head = self.request.method == Method::Head;
         if metadata.is_dir() {
-            let target_trimmed = self.raw_target.trim_end_matches('/').to_string();
-
+            let target_trimmed = self.routed_target.trim_end_matches('/').to_string();
             self.media_type = consts::H_MEDIA_HTML.to_string();
             self.body = DirectoryLister::new(&target_trimmed, &self.target, self.templates)
                 .get_listing_body()
@@ -139,12 +145,16 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     }
 
     fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
-        for (rule, replacement) in &config.routing_table {
-            match rule {
-                RouteSpec::Matches(path) if &raw_target == path => return Some(replacement.to_string()),
-                RouteSpec::StartsWith(path) if raw_target.starts_with(path) =>
-                    return Some(replacement.to_string() + &raw_target[path.len()..]),
-                _ => {}
+        let mut sub = SubstitutionMap::new();
+        for (RouteSpec(rule_regex), replacement) in &config.routing_table {
+            sub.clear();
+            if let Some(capture) = rule_regex.captures(raw_target) {
+                for (capture, name) in capture.iter().skip(1).zip(rule_regex.capture_names().skip(1)) {
+                    for var in capture.iter() {
+                        sub.insert(name.unwrap().to_string(), TemplateSubstitution::Single(var.as_str().to_string()));
+                    }
+                }
+                return replacement.substitute(&sub);
             }
         }
         None

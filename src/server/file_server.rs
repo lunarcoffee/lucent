@@ -1,21 +1,22 @@
+use std::str::FromStr;
+
 use async_std::io::{self, BufReader, BufWriter};
-use async_std::net::{TcpListener, TcpStream, SocketAddr};
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::path::Path;
 use async_std::prelude::StreamExt;
 use async_std::sync::{self, Receiver, Sender};
 use async_std::task;
 use futures::{FutureExt, select};
 
-use crate::log;
 use crate::consts;
-use crate::http::request::{Request, HttpVersion};
-use crate::server::Server;
-use crate::server::middleware::response_gen::ResponseGenerator;
-use crate::server::middleware::request_verifier::RequestVerifier;
-use crate::server::middleware::output_processor::OutputProcessor;
-use crate::server::template::templates::Templates;
+use crate::http::request::{HttpVersion, Request};
+use crate::log;
 use crate::server::config_loader::Config;
-use std::str::FromStr;
+use crate::server::middleware::output_processor::OutputProcessor;
+use crate::server::middleware::request_verifier::RequestVerifier;
+use crate::server::middleware::response_gen::ResponseGenerator;
+use crate::server::Server;
+use crate::server::template::templates::Templates;
 
 pub struct ConnInfo {
     pub remote_addr: SocketAddr,
@@ -93,8 +94,11 @@ impl FileServer {
 
         while !match RequestVerifier::new(&mut reader, &mut writer).verify_request().await {
             Err(output) => OutputProcessor::new(&mut writer, &templates, None).process(output).await,
-            Ok(request) => {
-                let output = ResponseGenerator::new(&config, &templates, &request, &conn_info).get_response().await;
+            Ok(mut request) => {
+                let output = ResponseGenerator::new(&config, &templates, &mut request, &conn_info)
+                    .get_response()
+                    .await;
+
                 client_intends_to_close(&request) || match output {
                     Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
                         .process(output)

@@ -7,7 +7,7 @@ mod template_parser;
 
 pub type PlaceholderName = String;
 
-#[derive(Clone)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum TemplatePart {
     String(String),
     Placeholder(PlaceholderName),
@@ -21,9 +21,9 @@ pub enum TemplateSubstitution {
     Multiple(Vec<SubstitutionMap>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct Template {
-    parts: Vec<TemplatePart>
+    pub parts: Vec<TemplatePart>
 }
 
 impl Template {
