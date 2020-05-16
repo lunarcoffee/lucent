@@ -67,6 +67,8 @@ impl FileServer {
 
     async fn main_loop(&self) -> io::Result<()> {
         let mut incoming = self.listener.incoming();
+        log::info("Server started.");
+
         loop {
             select! {
                 _ = self.stop_receiver.recv().fuse() => break,

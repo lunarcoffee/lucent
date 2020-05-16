@@ -111,10 +111,9 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
             if target_no_ext.ends_with("_cgi") {
                 let is_nph = target_no_ext.ends_with("_nph_cgi");
-                let raw_bytes = CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config, is_nph)
+                CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config, is_nph)
                     .get_response()
                     .await?;
-                return Err(MiddlewareOutput::Bytes(raw_bytes, true));
             }
 
             self.media_type = util::media_type_by_ext(file_ext).to_string();

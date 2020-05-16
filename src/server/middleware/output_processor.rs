@@ -31,7 +31,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
     }
 
     async fn respond_error(&mut self, status: Status, close: bool) -> bool {
-        self.log_request(status);
+        self.log_request(Some(status));
 
         let mut sub = SubstitutionMap::new();
         sub.insert("server".to_string(), TemplateSubstitution::Single(consts::SERVER_NAME_VERSION.to_string()));
@@ -53,7 +53,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
     }
 
     async fn respond_status(&mut self, status: Status, close: bool) -> bool {
-        self.log_request(status);
+        self.log_request(Some(status));
 
         let mut response = MessageBuilder::<Response>::new();
         if close {
@@ -67,18 +67,24 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
     }
 
     async fn respond_bytes(&mut self, bytes: Vec<u8>, close: bool) -> bool {
+        self.log_request(None);
+
         io::timeout(consts::MAX_WRITE_TIMEOUT, async {
             self.writer.write_all(&bytes).await?;
             self.writer.flush().await
         }).await.is_err() || close
     }
 
-    fn log_request(&self, status: Status) {
-        if status != Status::RequestTimeout {
-            match self.request {
-                Some(request) => log::info(format!("({}) {} {}", status, request.method, request.uri)),
-                _ => log::info(format!("({})", status)),
-            }
+    fn log_request(&self, status: Option<Status>) {
+        let status = match status {
+            Some(status) if status == Status::RequestTimeout => return,
+            Some(status) => status.to_string(),
+            _ => " - ".to_string(),
+        };
+
+        match self.request {
+            Some(request) => log::info(format!("({}) {} {}", status, request.method, request.uri)),
+            _ => log::info(format!("({})", status)),
         }
     }
 }

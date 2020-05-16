@@ -10,8 +10,6 @@ use async_std::process::Output;
 use std::io::Write;
 use crate::server::config_loader::Config;
 use async_std::path::Path;
-use async_std::io;
-use futures::AsyncWriteExt;
 
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];
 pub const CGI_VARS: &[&str] = &[
@@ -42,25 +40,30 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         }
     }
 
-    pub async fn get_response(&self) -> MiddlewareResult<Vec<u8>> {
+    pub async fn get_response(&self) -> MiddlewareResult<()> {
         match self.get_script_output().await {
-            Some(output) if output.status.success() && self.is_nph => return Ok(output.stdout),
-            Some(output) if output.status.success() && output.stdout.is_empty() =>
-                log::warn(format!("CGI script `{}` returned empty response!", self.script_path)),
             Some(output) if output.status.success() => {
-                let mut res = format!("{} {} \r\n", HttpVersion::Http11, Status::Ok).into_bytes();
-                let out = Self::replace_crlf_nl(output.stdout);
-                res.extend(out);
+                if self.is_nph {
+                    return Err(MiddlewareOutput::Bytes(output.stdout, false));
+                } else if output.stdout.is_empty() {
+                    log::warn(format!("CGI script `{}` returned empty response!", self.script_path));
+                } else {
+                    let mut res = format!("{} {} \r\n", HttpVersion::Http11, Status::Ok).into_bytes();
+                    let out = Self::replace_crlf_nl(output.stdout);
+                    res.extend(out);
 
-                let mut null = vec![];
-                return match Response::new(&mut res.as_slice(), &mut null).await {
-                    Ok(response) => Err(MiddlewareOutput::Response(response, false)),
-                    _ => Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
-                };
+                    let mut null = vec![];
+                    if let Ok(response) = Response::new(&mut res.as_slice(), &mut null).await {
+                        log::info(format!("({}) {} {}", response.status, self.request.method, self.request.uri));
+                        return Err(MiddlewareOutput::Response(response, false));
+                    }
+                }
             }
             Some(output) => {
-                log::warn(format!("Error in execution of CGI script `{}`!", self.script_path));
-                io::stdout().write_all(&output.stderr).await?;
+                log::warn(format!("Error in execution of CGI script `{}`:", self.script_path));
+                for line in String::from_utf8_lossy(&output.stderr).lines() {
+                    log::warn(format!("| {}", line));
+                }
             }
             _ => {}
         }
@@ -88,7 +91,7 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         let command = match self.command_by_extension() {
             Ok(command) => command,
             Err(ext) => {
-                log::warn(format!("No CGI script executor found for file extension `{}`!", ext));
+                log::warn(format!("No CGI script executor found for file extension `.{}`!", ext));
                 return None;
             }
         };
