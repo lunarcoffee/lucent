@@ -171,7 +171,10 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     async fn parse_header(&mut self, headers: &mut Headers, buf: &mut String) -> MessageParseResult<()> {
         let parts = buf.splitn(2, ':').collect::<Vec<_>>();
         let header_name = parts[0].to_ascii_lowercase();
-        let header_value = parts[1].trim_end_matches(consts::CRLF).trim_matches(consts::OPTIONAL_WHITESPACE);
+        let header_value = parts[1]
+            .strip_suffix(consts::CRLF)
+            .unwrap_or(parts[1])
+            .trim_matches(consts::OPTIONAL_WHITESPACE);
 
         let header_values = if Headers::is_multi_value(parts[0]) {
             header_value.split(',').map(|v| v.trim_matches(consts::OPTIONAL_WHITESPACE)).collect()

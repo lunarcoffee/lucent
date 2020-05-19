@@ -96,7 +96,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
         let is_head = self.request.method == Method::Head;
         if metadata.is_dir() {
-            let target_trimmed = self.routed_target.trim_end_matches('/').to_string();
+            let target_trimmed = self.routed_target.strip_suffix('/').unwrap_or(&self.routed_target).to_string();
             self.media_type = consts::H_MEDIA_HTML.to_string();
             self.body = DirectoryLister::new(&target_trimmed, &self.target, self.templates)
                 .get_listing_body()

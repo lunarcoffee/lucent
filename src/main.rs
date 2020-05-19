@@ -1,3 +1,5 @@
+#![feature(str_strip)]
+
 use std::env;
 
 use crate::server::file_server::{FileServer, FileServerStartError};

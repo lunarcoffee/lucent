@@ -9,7 +9,7 @@ pub struct Templates {
 }
 
 impl Templates {
-    pub async fn new(template_root: String) -> Option<Self> {
+    pub async fn new(template_root: &str) -> Option<Self> {
         let error_path = format!("{}/{}", template_root, consts::TEMPLATE_ERROR);
         let dir_listing_path = format!("{}/{}", template_root, consts::TEMPLATE_DIR_LISTING);
 

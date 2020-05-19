@@ -45,8 +45,8 @@ pub struct FileServer {
 
 impl FileServer {
     pub async fn new(config: Config) -> Result<Self, FileServerStartError> {
-        let file_root = config.file_root.trim_end_matches('/').to_string();
-        let templates = Templates::new(config.template_root.trim_end_matches('/').to_string())
+        let file_root = config.file_root.strip_suffix('/').unwrap_or(&config.file_root).to_string();
+        let templates = Templates::new(config.template_root.strip_suffix('/').unwrap_or(&config.template_root))
             .await
             .ok_or(FileServerStartError::InvalidTemplates)?;
 

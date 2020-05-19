@@ -60,7 +60,7 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
         let mut entry_subs = vec![];
 
         if let Some(parent_path) = Path::new(self.target).parent() {
-            let parent = parent_path.to_string_lossy().trim_start_matches('/').to_string();
+            let parent = parent_path.to_string_lossy().strip_prefix('/')?.to_string();
             let mut entry_sub = SubstitutionMap::new();
             Self::insert_entry(&mut entry_sub, parent, "../".to_string(), String::new(), "-".to_string());
             entry_subs.push(entry_sub);
@@ -69,7 +69,7 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
         for file in files {
             let metadata = file.metadata().await.ok()?;
             let name = file.file_name().to_string_lossy().to_string() + if metadata.is_dir() { "/" } else { "" };
-            let path_root = self.target.trim_start_matches('/').to_string();
+            let path_root = self.target.strip_prefix('/')?.to_string();
             let path = format!("{}{}", if path_root.is_empty() { String::new() } else { path_root + "/" }, &name);
             let last_modified = Self::format_time(metadata.modified().ok()?.duration_since(time::UNIX_EPOCH).ok()?);
             let size = if metadata.is_file() { Self::format_readable_size(metadata.len()) } else { "-".to_string() };
