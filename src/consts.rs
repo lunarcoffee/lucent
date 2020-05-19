@@ -43,6 +43,8 @@ pub const H_IF_MODIFIED_SINCE: &str = "if-modified-since";
 pub const H_IF_UNMODIFIED_SINCE: &str = "if-unmodified-since";
 pub const H_IF_RANGE: &str = "if-range";
 pub const H_RANGE: &str = "range";
+pub const H_AUTHORIZATION: &str = "authorization";
+pub const H_WWW_AUTHENTICATE: &str = "www-authenticate";
 
 pub const H_T_ENC_CHUNKED: &str = "chunked";
 pub const _H_T_ENC_COMPRESS: &str = "compress";
@@ -56,6 +58,9 @@ pub const H_CONN_CLOSE: &str = "close";
 pub const H_EXPECT_CONTINUE: &str = "100-continue";
 
 pub const H_RANGE_UNIT_BYTES: &str = "bytes";
+
+pub const H_AUTH_REALM: &str = "realm";
+pub const H_AUTH_BASIC: &str = "basic";
 
 pub const H_MEDIA_AAC: &str = "audio/aac";
 pub const H_MEDIA_AVI: &str = "video/x-msvideo";

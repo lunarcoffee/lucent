@@ -12,15 +12,18 @@ use crate::http::message::MessageBuilder;
 use crate::http::request::{Method, Request};
 use crate::http::response::{Response, Status};
 use crate::http::uri::Uri;
-use crate::server::config_loader::{Config, RouteSpec};
+use crate::server::config::Config;
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::middleware::cgi_runner::CgiRunner;
-use crate::server::middleware::cond_checker::{ConditionalChecker, ConditionalInformation};
+use crate::server::middleware::cond_checker::{ConditionalChecker, ConditionalInfo};
 use crate::server::middleware::dir_lister::DirectoryLister;
 use crate::server::middleware::range_parser::{RangeBody, RangeParser};
 use crate::server::template::{SubstitutionMap, TemplateSubstitution};
 use crate::server::template::templates::Templates;
+use crate::server::config::route_spec::RouteSpec;
+use crate::server::config::route_replacement::RouteReplacement;
+use crate::server::middleware::basic_auth::BasicAuthChecker;
 
 pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     config: &'a Config,
@@ -39,12 +42,7 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
 
 impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     pub fn new(config: &'a Config, templates: &'b Templates, request: &'c mut Request, conn: &'d ConnInfo) -> Self {
-        let raw_target = request.uri.to_string();
-        let routed_target = Self::route_raw_target(config, &raw_target).unwrap_or(raw_target.to_string());
-        let target = format!("{}{}", &config.file_root, &routed_target);
-        if let Ok(uri) = Uri::from(&request.method, &routed_target) {
-            request.uri = uri;
-        }
+        let (raw_target, routed_target, target) = rewrite_url(request, config);
 
         ResponseGenerator {
             config,
@@ -61,6 +59,8 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     }
 
     pub async fn get_response(mut self) -> MiddlewareResult<()> {
+        let required_auth = BasicAuthChecker::new(self.request, self.config).check()?;
+
         let file = match File::open(&self.target).await {
             Ok(file) => file,
             _ => return Err(MiddlewareOutput::Error(Status::NotFound, false)),
@@ -69,7 +69,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         let metadata = file.metadata().await?;
         let last_modified = Some(metadata.modified()?.into());
         let etag = Some(Self::generate_etag(&last_modified.unwrap()));
-        let info = ConditionalInformation::new(etag, last_modified);
+        let info = ConditionalInfo::new(etag, last_modified);
         self.set_body(&info, &metadata).await?;
 
         let response = self
@@ -79,16 +79,15 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             .with_body(self.body, &self.media_type)
             .build();
 
-        let reroute = if self.raw_target != self.routed_target {
-            format!(" -> {}", self.routed_target)
-        } else {
-            String::new()
-        };
-        log::info(format!("({}) {} {}{}", response.status, &self.request.method, &self.raw_target, reroute));
+        let routed = self.routed_target;
+        let reroute = if self.raw_target != routed { format!(" -> {}", routed) } else { String::new() };
+        let auth = if required_auth { " (basic auth)" } else { "" };
+        log::info(format!("({}) {} {}{}{}", response.status, &self.request.method, &self.raw_target, reroute, auth));
+
         Err(MiddlewareOutput::Response(response, false))
     }
 
-    async fn set_body(&mut self, info: &ConditionalInformation, metadata: &Metadata) -> MiddlewareResult<()> {
+    async fn set_body(&mut self, info: &ConditionalInfo, metadata: &Metadata) -> MiddlewareResult<()> {
         let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
             Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
             Err(output) if !metadata.is_dir() => return Err(output),
@@ -145,22 +144,6 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         Ok(())
     }
 
-    fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
-        for (RouteSpec(rule_regex), replacement) in &config.routing_table {
-            if let Some(capture) = rule_regex.captures(raw_target) {
-                let sub = capture.iter().zip(rule_regex.capture_names()).skip(1)
-                    .map(|(matches, name)| (matches.into_iter(), name.unwrap().to_string()))
-                    .flat_map(|(captures, name)| captures.map(move |c| (name.to_string(), c.as_str().to_string())))
-                    .map(|(name, var)| (name, TemplateSubstitution::Single(var)))
-                    .collect::<SubstitutionMap>();
-
-                let end_match = rule_regex.find(raw_target).unwrap().end();
-                return Some(replacement.substitute(&sub)? + &raw_target[end_match..]);
-            }
-        }
-        None
-    }
-
     fn generate_etag(modified: &DateTime<Utc>) -> String {
         let mut hasher = DefaultHasher::new();
         let time = util::format_time_imf(modified);
@@ -171,4 +154,30 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
         etag + &format!("{:x}\"", hasher.finish())
     }
+}
+
+fn rewrite_url(request: &mut Request, config: &Config) -> (String, String, String) {
+    let raw_target = request.uri.to_string();
+    let routed_target = route_raw_target(config, &raw_target).unwrap_or(raw_target.to_string());
+    let target = format!("{}{}", &config.file_root, &routed_target);
+    if let Ok(uri) = Uri::from(&request.method, &routed_target) {
+        request.uri = uri;
+    }
+    (raw_target, routed_target, target)
+}
+
+fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
+    for (RouteSpec(rule_regex), RouteReplacement(replacement)) in &config.routing_table {
+        if let Some(capture) = rule_regex.captures(raw_target) {
+            let sub = capture.iter().zip(rule_regex.capture_names()).skip(1)
+                .map(|(matches, name)| (matches.into_iter(), name.unwrap().to_string()))
+                .flat_map(|(captures, name)| captures.map(move |c| (name.to_string(), c.as_str().to_string())))
+                .map(|(name, var)| (name, TemplateSubstitution::Single(var)))
+                .collect::<SubstitutionMap>();
+
+            let end_match = rule_regex.find(raw_target).unwrap().end();
+            return Some(replacement.substitute(&sub)? + &raw_target[end_match..]);
+        }
+    }
+    None
 }

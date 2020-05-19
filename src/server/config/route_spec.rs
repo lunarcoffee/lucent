@@ -1,12 +1,7 @@
-use std::collections::HashMap;
-
-use async_std::fs;
-use linked_hash_map::LinkedHashMap;
 use serde::{de, Deserialize, Deserializer};
 use serde::de::Visitor;
 use serde::export::{fmt, Formatter};
 
-use crate::server::template::Template;
 use regex::Regex;
 use std::hash::{Hash, Hasher};
 
@@ -35,14 +30,6 @@ impl<'a> Deserialize<'a> for RouteSpec {
     }
 }
 
-impl<'a> Deserialize<'a> for Template {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'a>
-    {
-        deserializer.deserialize_str(TemplateStringVisitor)
-    }
-}
-
 struct RouteSpecStringVisitor;
 
 impl<'a> Visitor<'a> for RouteSpecStringVisitor {
@@ -61,41 +48,6 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
             Some('/') => Ok(RouteSpec(convert_to_regex(value, false))),
             _ => Err(err),
         }
-    }
-}
-
-struct TemplateStringVisitor;
-
-impl<'a> Visitor<'a> for TemplateStringVisitor {
-    type Value = Template;
-
-    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-        formatter.write_str("String value beginning with `/`.")
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where E: de::Error
-    {
-        let err = E::custom(format!("Route replacement invalid: {}", value));
-        match value.chars().next() {
-            Some('/') => Ok(Template::new(value.to_string()).ok_or(err)?),
-            _ => Err(err),
-        }
-    }
-}
-
-#[derive(Clone, Deserialize)]
-pub struct Config {
-    pub file_root: String,
-    pub template_root: String,
-    pub address: String,
-    pub cgi_executors: HashMap<String, String>,
-    pub routing_table: LinkedHashMap<RouteSpec, Template>,
-}
-
-impl Config {
-    pub async fn load(path: &str) -> Option<Self> {
-        serde_yaml::from_str::<Config>(&fs::read_to_string(path).await.ok()?).ok()
     }
 }
 
@@ -121,7 +73,7 @@ fn convert_to_regex(route: &str, must_match_entire: bool) -> Regex {
         .map(|(s, is_var)| if *is_var {
             match s.len() {
                 1 => format!("(?P<{}>.+)", &s[0][1..s[0].len() - 1]),
-                _ =>  format!("(?P<{}>{})", &s[0][1..], s.get(1).map(|s| &s[..s.len() - 1]).unwrap_or(&".+")),
+                _ => format!("(?P<{}>{})", &s[0][1..], s.get(1).map(|s| &s[..s.len() - 1]).unwrap_or(&".+")),
             }
         } else {
             regex::escape(s[0])

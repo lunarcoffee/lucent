@@ -8,7 +8,7 @@ use crate::http::uri::Uri;
 use crate::server::file_server::ConnInfo;
 use async_std::process::Output;
 use std::io::Write;
-use crate::server::config_loader::Config;
+use crate::server::config::Config;
 use async_std::path::Path;
 
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];

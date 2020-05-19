@@ -13,3 +13,6 @@ routing_table:
     "@/{image_name:[a-zA-Z]+}/img": "/files/images/[image_name].jpg"
     "@/test/calc/pdfs/{pdf_name}": "/files/calc/[pdf_name].pdf"
     "/test/calc": "/files/calc"
+
+basic_auth:
+    "/files/restricted": ["Restricted", "LunarCoffee:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"]

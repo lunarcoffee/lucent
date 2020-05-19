@@ -8,6 +8,7 @@ pub mod range_parser;
 pub mod cond_checker;
 pub mod dir_lister;
 pub mod cgi_runner;
+pub mod basic_auth;
 
 pub enum MiddlewareOutput {
     Error(Status, bool),

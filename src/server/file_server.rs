@@ -11,12 +11,13 @@ use futures::{FutureExt, select};
 use crate::consts;
 use crate::http::request::{HttpVersion, Request};
 use crate::log;
-use crate::server::config_loader::Config;
+use crate::server::config::Config;
 use crate::server::middleware::output_processor::OutputProcessor;
 use crate::server::middleware::request_verifier::RequestVerifier;
 use crate::server::middleware::response_gen::ResponseGenerator;
 use crate::server::Server;
 use crate::server::template::templates::Templates;
+use futures::io::ErrorKind;
 
 pub struct ConnInfo {
     pub remote_addr: SocketAddr,
@@ -27,6 +28,9 @@ pub struct ConnInfo {
 pub enum FileServerStartError {
     InvalidFileRoot,
     InvalidTemplates,
+
+    AddressInUse,
+    AddressUnavailable,
     CannotBindAddress,
 }
 
@@ -49,7 +53,11 @@ impl FileServer {
         let (stop_sender, stop_receiver) = sync::channel(1);
         let listener = match TcpListener::bind(&config.address).await {
             Ok(listener) => listener,
-            _ => return Err(FileServerStartError::CannotBindAddress),
+            Err(e) => return match e.kind() {
+                ErrorKind::AddrInUse => Err(FileServerStartError::AddressInUse),
+                ErrorKind::AddrNotAvailable => Err(FileServerStartError::AddressUnavailable),
+                _ => Err(FileServerStartError::CannotBindAddress),
+            }
         };
 
         if !Path::new(&file_root).is_dir().await {

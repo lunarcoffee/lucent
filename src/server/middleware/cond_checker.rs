@@ -5,24 +5,24 @@ use crate::util;
 use crate::http::response::Status;
 use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 
-pub struct ConditionalInformation {
+pub struct ConditionalInfo {
     pub etag: Option<String>,
     pub last_modified: Option<DateTime<Utc>>,
 }
 
-impl ConditionalInformation {
+impl ConditionalInfo {
     pub fn new(etag: Option<String>, last_modified: Option<DateTime<Utc>>) -> Self {
-        ConditionalInformation { etag, last_modified }
+        ConditionalInfo { etag, last_modified }
     }
 }
 
 pub struct ConditionalChecker<'a, 'b> {
-    info: &'a ConditionalInformation,
+    info: &'a ConditionalInfo,
     headers: &'b Headers,
 }
 
 impl ConditionalChecker<'_, '_> {
-    pub fn new<'a, 'b>(info: &'a ConditionalInformation, headers: &'b Headers) -> ConditionalChecker<'a, 'b> {
+    pub fn new<'a, 'b>(info: &'a ConditionalInfo, headers: &'b Headers) -> ConditionalChecker<'a, 'b> {
         ConditionalChecker { info, headers }
     }
 

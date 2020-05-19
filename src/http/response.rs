@@ -35,7 +35,7 @@ pub enum Status {
     _TemporaryRedirect = 307,
     _PermanentRedirect,
     BadRequest = 400,
-    _Unauthorized,
+    Unauthorized,
     _PaymentRequired,
     Forbidden,
     NotFound,

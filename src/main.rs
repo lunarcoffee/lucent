@@ -2,7 +2,7 @@ use std::env;
 
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
-use crate::server::config_loader::Config;
+use crate::server::config::Config;
 
 mod server;
 mod log;
@@ -27,6 +27,8 @@ async fn main() {
         Ok(server) => server.start(),
         Err(FileServerStartError::InvalidFileRoot) => log::fatal("File directory invalid!"),
         Err(FileServerStartError::InvalidTemplates) => log::fatal("Template directory invalid, or missing templates!"),
-        _ => log::fatal("Cannot not bind to that address! Do I need root?"),
+        Err(FileServerStartError::AddressInUse) => log::fatal("That address is in use!"),
+        Err(FileServerStartError::AddressUnavailable) => log::fatal("That address is unavailable!"),
+        _ => log::fatal("Cannot bind to that address!"),
     }
 }

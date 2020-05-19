@@ -1,6 +1,6 @@
 pub mod file_server;
 pub mod template;
-pub mod config_loader;
+pub mod config;
 
 mod middleware;
 
