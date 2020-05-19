@@ -15,4 +15,5 @@ routing_table:
     "/test/calc": "/files/calc"
 
 basic_auth:
+    "@/files/tools/spoiler_image.html": ["Tools", "L:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"]
     "/files/restricted": ["Restricted", "LunarCoffee:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"]

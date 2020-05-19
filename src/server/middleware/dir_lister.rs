@@ -45,11 +45,10 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
             .filter(|f| !f.file_name().to_string_lossy().starts_with('.'))
             .collect();
 
-        let body = match self.get_substituted_template(files, custom_message).await {
-            Some(body) => body,
-            _ => return Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
+        return match self.get_substituted_template(files, custom_message).await {
+            Some(body) => Ok(body),
+            _ => Err(MiddlewareOutput::Error(Status::InternalServerError, false)),
         };
-        Ok(body)
     }
 
     async fn get_substituted_template(&self, files: Vec<DirEntry>, custom_message: String) -> Option<String> {

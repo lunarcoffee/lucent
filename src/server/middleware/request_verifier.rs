@@ -1,5 +1,5 @@
 use async_std::io::prelude::Read;
-use crate::http::request::{Request, Method};
+use crate::http::request::Request;
 use crate::http::parser::MessageParseError;
 use crate::http::response::Status;
 use async_std::io::Write;
@@ -30,11 +30,6 @@ impl<'a, 'b, R: Read + Unpin, W: Write + Unpin> RequestVerifier<'a, 'b, R, W> {
                 _ => Status::BadRequest,
             }, true)),
         };
-
-        if request.method != Method::Get && request.method != Method::Head {
-            Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false))
-        } else {
-            Ok(request)
-        }
+        Ok(request)
     }
 }

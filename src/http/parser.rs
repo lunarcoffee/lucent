@@ -56,7 +56,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     pub async fn parse_request(&mut self) -> MessageParseResult<Request> {
         let (method, uri, http_version) = self.parse_request_line().await?;
         let headers = self.parse_headers(true).await?;
-        let body = self.parse_body(&headers).await?;
+        let body = self.parse_body(method, &headers).await?;
 
         Ok(Request {
             method,
@@ -71,7 +71,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     pub async fn parse_response(&mut self) -> MessageParseResult<Response> {
         let (http_version, status) = self.parse_status_line().await?;
         let headers = self.parse_headers(false).await?;
-        let body = self.parse_body(&headers).await?;
+        let body = self.parse_body(Method::Post, &headers).await?;
 
         Ok(Response {
             http_version,
@@ -197,7 +197,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         }
     }
 
-    async fn parse_body(&mut self, headers: &Headers) -> MessageParseResult<Option<Vec<u8>>> {
+    async fn parse_body(&mut self, method: Method, headers: &Headers) -> MessageParseResult<Option<Vec<u8>>> {
         if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
             if encodings.iter().any(|encoding| encoding != consts::H_T_ENC_CHUNKED) {
                 return Err(MessageParseError::UnsupportedTransferEncoding);
@@ -206,8 +206,13 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
             Ok(Some(body))
         } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
             let length = match length[0].parse() {
-                Ok(length) if length > consts::MAX_BODY_LENGTH => return Err(MessageParseError::BodyTooLarge),
-                Ok(length) => length,
+                Ok(length) => {
+                    let exceeded_get_body_max = method == Method::Get && length > consts::MAX_GET_BODY_LENGTH;
+                    if exceeded_get_body_max || length > consts::MAX_OTHER_BODY_LENGTH {
+                        return Err(MessageParseError::BodyTooLarge);
+                    }
+                    length
+                }
                 _ => return Err(MessageParseError::InvalidBody),
             };
             let mut body = vec![0; length];

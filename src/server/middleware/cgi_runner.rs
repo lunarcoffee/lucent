@@ -7,9 +7,9 @@ use crate::http::request::{Request, HttpVersion};
 use crate::http::uri::Uri;
 use crate::server::file_server::ConnInfo;
 use async_std::process::Output;
-use std::io::Write;
 use crate::server::config::Config;
 use async_std::path::Path;
+use std::io::Write;
 
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];
 pub const CGI_VARS: &[&str] = &[
@@ -23,14 +23,14 @@ pub const CGI_VARS: &[&str] = &[
 
 pub struct CgiRunner<'a, 'b, 'c, 'd> {
     script_path: &'a str,
-    request: &'b Request,
+    request: &'b mut Request,
     conn_info: &'c ConnInfo,
     config: &'d Config,
     is_nph: bool,
 }
 
 impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
-    pub fn new(path: &'a str, request: &'b Request, conn: &'c ConnInfo, config: &'d Config, is_nph: bool) -> Self {
+    pub fn new(path: &'a str, request: &'b mut Request, conn: &'c ConnInfo, config: &'d Config, is_nph: bool) -> Self {
         CgiRunner {
             script_path: path,
             request,
@@ -40,7 +40,7 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         }
     }
 
-    pub async fn get_response(&self) -> MiddlewareResult<()> {
+    pub async fn get_response(&mut self) -> MiddlewareResult<()> {
         match self.get_script_output().await {
             Some(output) if output.status.success() => {
                 if self.is_nph {
@@ -70,7 +70,7 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         Err(MiddlewareOutput::Error(Status::InternalServerError, false))
     }
 
-    async fn get_script_output(&self) -> Option<Output> {
+    async fn get_script_output(&mut self) -> Option<Output> {
         let uri = self.request.uri.to_string();
         let uri_no_file = &uri[..uri.rfind('/')?];
         let remote_addr = &self.conn_info.remote_addr.to_string();
@@ -112,7 +112,7 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         }
 
         let mut script = script.spawn().ok()?;
-        &script.stdin.as_mut()?.write(&self.request.to_bytes_no_body()).ok()?;
+        &script.stdin.as_mut()?.write(&self.request.get_body_mut().as_ref().unwrap_or(&vec![])).ok()?;
         script.wait_with_output().ok()
     }
 

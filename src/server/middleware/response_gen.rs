@@ -16,7 +16,7 @@ use crate::server::config::Config;
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::server::middleware::cgi_runner::CgiRunner;
-use crate::server::middleware::cond_checker::{ConditionalChecker, ConditionalInfo};
+use crate::server::middleware::cond_checker::{ConditionalChecker, CondInfo};
 use crate::server::middleware::dir_lister::DirectoryLister;
 use crate::server::middleware::range_parser::{RangeBody, RangeParser};
 use crate::server::template::{SubstitutionMap, TemplateSubstitution};
@@ -29,7 +29,7 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     config: &'a Config,
     templates: &'b Templates,
 
-    request: &'c Request,
+    request: &'c mut Request,
     conn_info: &'d ConnInfo,
     raw_target: String,
     routed_target: String,
@@ -47,11 +47,13 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         ResponseGenerator {
             config,
             templates,
+
             request,
             conn_info: conn,
             raw_target,
             routed_target,
             target,
+
             response: MessageBuilder::<Response>::new(),
             body: vec![],
             media_type: consts::H_MEDIA_BINARY.to_string(),
@@ -69,7 +71,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         let metadata = file.metadata().await?;
         let last_modified = Some(metadata.modified()?.into());
         let etag = Some(Self::generate_etag(&last_modified.unwrap()));
-        let info = ConditionalInfo::new(etag, last_modified);
+        let info = CondInfo::new(etag, last_modified);
         self.set_body(&info, &metadata).await?;
 
         let response = self
@@ -87,14 +89,14 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         Err(MiddlewareOutput::Response(response, false))
     }
 
-    async fn set_body(&mut self, info: &ConditionalInfo, metadata: &Metadata) -> MiddlewareResult<()> {
-        let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
-            Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
-            Err(output) if !metadata.is_dir() => return Err(output),
-            _ => true,
-        };
+    async fn set_body(&mut self, info: &CondInfo, metadata: &Metadata) -> MiddlewareResult<()> {
+        if self.request.method != Method::Get && self.request.method != Method::Head {
+            return match self.set_file_body(true, info, metadata).await {
+                Err(e) => Err(e),
+                _ => Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false)),
+            };
+        }
 
-        let is_head = self.request.method == Method::Head;
         if metadata.is_dir() {
             let target_trimmed = self.routed_target.strip_suffix('/').unwrap_or(&self.routed_target).to_string();
             self.media_type = consts::H_MEDIA_HTML.to_string();
@@ -103,24 +105,38 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
                 .await?
                 .into_bytes();
         } else {
-            let target = &self.target;
-            let path = Path::new(target);
-            let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-            let target_no_ext = &target[..target.len() - file_ext.len() - 1];
+            self.set_file_body(false, info, metadata).await?;
+        }
+        Ok(())
+    }
 
-            if target_no_ext.ends_with("_cgi") {
-                let is_nph = target_no_ext.ends_with("_nph_cgi");
-                CgiRunner::new(&self.target, &self.request, &self.conn_info, &self.config, is_nph)
-                    .get_response()
-                    .await?;
-            }
+    async fn set_file_body(&mut self, cgi: bool, info: &CondInfo, metadata: &Metadata) -> MiddlewareResult<()> {
+        let target = &self.target;
+        let path = Path::new(target);
+        let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let target_no_ext = &target[..target.len() - file_ext.len() - 1];
 
-            self.media_type = util::media_type_by_ext(file_ext).to_string();
-            if !is_head {
-                self.body = fs::read(&self.target).await?;
-                if can_send_range {
-                    self.set_range_body()?;
-                }
+        if target_no_ext.ends_with("_cgi") {
+            let is_nph = target_no_ext.ends_with("_nph_cgi");
+            CgiRunner::new(&self.target, &mut self.request, &self.conn_info, &self.config, is_nph)
+                .get_response()
+                .await?;
+        }
+        if cgi {
+            return Ok(());
+        }
+
+        let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
+            Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
+            Err(output) if !metadata.is_dir() => return Err(output),
+            _ => true,
+        };
+
+        self.media_type = util::media_type_by_ext(file_ext).to_string();
+        if self.request.method != Method::Head {
+            self.body = fs::read(&self.target).await?;
+            if can_send_range {
+                self.set_range_body()?;
             }
         }
         Ok(())

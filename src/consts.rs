@@ -7,7 +7,8 @@ pub const SERVER_NAME_VERSION: &str = "Lucent/0.1.0";
 
 pub const MAX_URI_LENGTH: usize = 8_192;
 pub const MAX_HEADER_LENGTH: usize = 8_192;
-pub const MAX_BODY_LENGTH: usize = 4_194_304;
+pub const MAX_GET_BODY_LENGTH: usize = 4 << 20;
+pub const MAX_OTHER_BODY_LENGTH: usize = 512 << 20;
 pub const MAX_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 

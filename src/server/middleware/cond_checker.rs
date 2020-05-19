@@ -5,24 +5,24 @@ use crate::util;
 use crate::http::response::Status;
 use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 
-pub struct ConditionalInfo {
+pub struct CondInfo {
     pub etag: Option<String>,
     pub last_modified: Option<DateTime<Utc>>,
 }
 
-impl ConditionalInfo {
+impl CondInfo {
     pub fn new(etag: Option<String>, last_modified: Option<DateTime<Utc>>) -> Self {
-        ConditionalInfo { etag, last_modified }
+        CondInfo { etag, last_modified }
     }
 }
 
 pub struct ConditionalChecker<'a, 'b> {
-    info: &'a ConditionalInfo,
+    info: &'a CondInfo,
     headers: &'b Headers,
 }
 
 impl ConditionalChecker<'_, '_> {
-    pub fn new<'a, 'b>(info: &'a ConditionalInfo, headers: &'b Headers) -> ConditionalChecker<'a, 'b> {
+    pub fn new<'a, 'b>(info: &'a CondInfo, headers: &'b Headers) -> ConditionalChecker<'a, 'b> {
         ConditionalChecker { info, headers }
     }
 
@@ -45,11 +45,10 @@ impl ConditionalChecker<'_, '_> {
             }
         } else if let Some(since) = self.headers.get(consts::H_IF_UNMODIFIED_SINCE) {
             if let Some(last_modified) = self.info.last_modified {
-                let since = match util::parse_time_imf(&since[0]) {
-                    Some(since) => since,
-                    _ => return true,
+                return match util::parse_time_imf(&since[0]) {
+                    Some(since) => last_modified <= since,
+                    _ => true,
                 };
-                return last_modified <= since;
             }
         }
         true
@@ -62,11 +61,10 @@ impl ConditionalChecker<'_, '_> {
             }
         } else if let Some(since) = self.headers.get(consts::H_IF_MODIFIED_SINCE) {
             if let Some(last_modified) = self.info.last_modified {
-                let since = match util::parse_time_imf(&since[0]) {
-                    Some(since) => since,
-                    _ => return true,
+                return match util::parse_time_imf(&since[0]) {
+                    Some(since) => last_modified > since,
+                    _ => true,
                 };
-                return last_modified > since;
             }
         }
         true
