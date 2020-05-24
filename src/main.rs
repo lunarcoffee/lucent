@@ -5,6 +5,7 @@ use std::env;
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
 use crate::server::config::Config;
+use async_std::sync::Arc;
 
 mod server;
 mod log;
@@ -26,7 +27,12 @@ async fn main() {
     };
 
     match FileServer::new(config).await {
-        Ok(server) => server.start(),
+        Ok(server) => {
+            let server = Arc::new(server);
+            let server_clone = Arc::clone(&server);
+            let _ = ctrlc::set_handler(move || server_clone.stop());
+            server.start();
+        }
         Err(FileServerStartError::InvalidFileRoot) => log::fatal("File directory invalid!"),
         Err(FileServerStartError::InvalidTemplates) => log::fatal("Template directory invalid, or missing templates!"),
         Err(FileServerStartError::AddressInUse) => log::fatal("That address is in use!"),

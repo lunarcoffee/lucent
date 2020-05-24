@@ -91,6 +91,7 @@ impl FileServer {
                 }
             }
         }
+        log::info("Server exiting.");
         Ok(())
     }
 
@@ -129,6 +130,7 @@ impl Server for FileServer {
     }
 
     fn stop(&self) {
+        log::info("Stopping server.");
         task::block_on(self.stop_sender.send(()));
     }
 }
