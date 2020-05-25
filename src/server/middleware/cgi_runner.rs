@@ -10,6 +10,7 @@ use async_std::process::Output;
 use crate::server::config::Config;
 use async_std::path::Path;
 use std::io::Write;
+use futures::AsyncReadExt;
 
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];
 pub const CGI_VARS: &[&str] = &[
@@ -112,11 +113,16 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         }
 
         let mut script = script.spawn().ok()?;
-        let body = match &self.request.get_body_mut().as_ref() {
-            Some(Body::Bytes(bytes)) => bytes,
-            _ => return None,
+        let mut body = vec![];
+        match &mut self.request.get_body_mut() {
+            Some(Body::Bytes(bytes)) => body = bytes.to_vec(),
+            Some(Body::Stream(file, len)) => {
+                body.reserve(*len);
+                file.read_exact(&mut body).await.ok()?;
+            }
+            _ => {}
         };
-        &script.stdin.as_mut()?.write(body).ok()?;
+        &script.stdin.as_mut()?.write(&body).ok()?;
         script.wait_with_output().ok()
     }
 

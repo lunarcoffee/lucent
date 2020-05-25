@@ -24,7 +24,6 @@ use crate::server::config::route_spec::RouteSpec;
 use crate::server::config::route_replacement::RouteReplacement;
 use crate::server::middleware::basic_auth::BasicAuthChecker;
 use async_std::io::{prelude::SeekExt, SeekFrom};
-use futures::AsyncReadExt;
 
 pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     config: &'a Config,
@@ -134,7 +133,9 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
         self.media_type = util::media_type_by_ext(file_ext).to_string();
         if self.request.method != Method::Head {
-            self.body = Body::File(File::open(&self.target).await?);
+            let file = File::open(&self.target).await?;
+            let len = file.metadata().await?.len();
+            self.body = Body::Stream(file, len as usize);
             if can_send_range {
                 self.set_range_body().await?;
             }
@@ -143,22 +144,16 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
     }
 
     async fn set_range_body(&mut self) -> MiddlewareResult<()> {
-        let mut body_buf = vec![];
-        let body = match self.request.headers.get(consts::H_RANGE) {
-            Some(_) => match &self.body {
-                Body::Bytes(bytes) => bytes,
-                Body::File(file) => {
-                    file.clone().read_to_end(&mut body_buf).await?;
-                    &body_buf
-                }
-            },
-            _ => return Ok(()),
-        };
-
-        match RangeParser::new(&self.request.headers, body, &self.media_type).get_body() {
+        match RangeParser::new(&self.request.headers, &mut self.body, &self.media_type).await.get_body().await {
             Err(output) => return Err(output),
-            Ok(RangeBody::Range(body, content_range)) => {
-                self.body = Body::Bytes(body);
+            Ok(RangeBody::Range(range, content_range)) => {
+                match &mut self.body {
+                    Body::Bytes(bytes) => self.body = Body::Bytes(bytes[range.low..range.high].to_vec()),
+                    Body::Stream(file, len) => {
+                        file.seek(SeekFrom::Start(range.low as u64)).await?;
+                        *len = range.high - range.low;
+                    }
+                };
                 self.response.set_header(consts::H_CONTENT_RANGE, &content_range);
                 self.response.set_status(Status::PartialContent);
             }

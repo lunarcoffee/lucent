@@ -70,7 +70,7 @@ impl Request {
         MessageParser::new(BufReader::new(reader), BufWriter::new(writer)).parse_request().await
     }
 
-    pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
+    pub async fn _send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
         message::send(writer, self).await
     }
 }

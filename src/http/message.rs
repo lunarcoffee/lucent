@@ -6,14 +6,22 @@ use crate::http::uri::Uri;
 use crate::{util, consts};
 use async_std::io::Write;
 use async_std::io;
-use async_std::io::prelude::{WriteExt, SeekExt, ReadExt};
+use async_std::io::prelude::{WriteExt, ReadExt};
 use async_std::fs::File;
-use async_std::io::SeekFrom;
 use async_std::task;
 
 pub enum Body {
     Bytes(Vec<u8>),
-    File(File),
+    Stream(File, usize),
+}
+
+impl Body {
+    pub async fn len(&self) -> usize {
+        match self {
+            Body::Bytes(bytes) => bytes.len(),
+            Body::Stream(_, len) => *len,
+        }
+    }
 }
 
 pub trait Message {
@@ -31,7 +39,7 @@ pub struct MessageBuilder<M: Message> {
 }
 
 impl MessageBuilder<Request> {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         let mut headers = Headers::from(HashMap::new());
         headers.set_one(consts::H_CONTENT_LENGTH, "0");
 
@@ -47,21 +55,21 @@ impl MessageBuilder<Request> {
         }
     }
 
-    pub fn set_method(&mut self, method: Method) {
+    pub fn _set_method(&mut self, method: Method) {
         self.message.method = method;
     }
 
-    pub fn with_method(mut self, method: Method) -> Self {
-        self.set_method(method);
+    pub fn _with_method(mut self, method: Method) -> Self {
+        self._set_method(method);
         self
     }
 
-    pub fn set_uri(&mut self, uri: Uri) {
+    pub fn _set_uri(&mut self, uri: Uri) {
         self.message.uri = uri;
     }
 
-    pub fn with_uri(mut self, uri: Uri) -> Self {
-        self.set_uri(uri);
+    pub fn _with_uri(mut self, uri: Uri) -> Self {
+        self._set_uri(uri);
         self
     }
 }
@@ -126,20 +134,13 @@ impl<M: Message> MessageBuilder<M> {
     }
 
     pub fn with_body(mut self, body: Body, media_type: &str) -> Self {
-        match &body {
-            Body::File(file) => {
-                let len = task::block_on(file.metadata()).unwrap().len().to_string();
-                self.set_header(consts::H_CONTENT_LENGTH, &len);
-            }
-            Body::Bytes(bytes) => {
-                if bytes.len() > consts::MAX_BODY_BEFORE_CHUNK {
-                    self.message.set_chunked();
-                    self = self
-                        .with_header(consts::H_TRANSFER_ENCODING, consts::H_T_ENC_CHUNKED)
-                        .without_header(consts::H_CONTENT_LENGTH);
-                } else {
-                    self.set_header(consts::H_CONTENT_LENGTH, &bytes.len().to_string());
-                }
+        self.set_header(consts::H_CONTENT_LENGTH, &task::block_on(body.len()).to_string());
+        if let Body::Bytes(bytes) = &body {
+            if bytes.len() > consts::MAX_BODY_BEFORE_CHUNK {
+                self.message.set_chunked();
+                self = self
+                    .with_header(consts::H_TRANSFER_ENCODING, consts::H_T_ENC_CHUNKED)
+                    .without_header(consts::H_CONTENT_LENGTH);
             }
         }
 
@@ -153,54 +154,39 @@ impl<M: Message> MessageBuilder<M> {
 }
 
 pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> io::Result<()> {
-    if message.is_chunked() {
-        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-            writer.write_all(&message.to_bytes_no_body()).await?;
-            writer.flush().await
-        }).await?;
+    io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+        writer.write_all(&message.to_bytes_no_body()).await?;
+        writer.flush().await
+    }).await?;
 
-        if let Some(body) = message.into_body() {
+    let chunked = message.is_chunked();
+    if let Some(body) = message.into_body() {
+        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
             match body {
+                Body::Stream(file, len) => with_file(len, file, |c| task::block_on(writer.write_all(&c))).await?,
                 Body::Bytes(bytes) => {
-                    for chunk in bytes.chunks(consts::CHUNK_SIZE) {
-                        write_chunk(writer, chunk).await?;
+                    if chunked {
+                        for chunk in bytes.chunks(consts::CHUNK_SIZE) {
+                            write_chunk(writer, chunk).await?;
+                        }
+                        io::timeout(consts::MAX_WRITE_TIMEOUT, writer.write(b"0\r\n\r\n")).await?;
+                    } else {
+                        writer.write_all(&bytes).await?;
                     }
                 }
-                Body::File(mut file) => file_with_chunks(
-                    &mut file,
-                    |chunk| task::block_on(write_chunk(writer, &chunk)),
-                ).await?,
             }
-            io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-                writer.write(b"0\r\n\r\n").await?;
-                writer.flush().await
-            }).await?;
-        }
-        Ok(())
-    } else {
-        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-            writer.write_all(&message.to_bytes_no_body()).await?;
             writer.flush().await?;
-
-            if let Some(body) = message.into_body() {
-                match body {
-                    Body::Bytes(bytes) => writer.write_all(&bytes).await?,
-                    Body::File(mut file) => file_with_chunks(
-                        &mut file,
-                        |chunk| task::block_on(writer.write_all(&chunk)),
-                    ).await?,
-                }
-                writer.flush().await?;
-            }
             Ok(())
-        }).await
+        }).await?;
     }
+    Ok(())
 }
 
-async fn file_with_chunks<F: FnMut(Vec<u8>) -> io::Result<()>>(file: &mut File, mut op: F) -> io::Result<()> {
-    let chunk_count = (file.metadata().await?.len() as usize - 1) / consts::FILE_READ_CHUNK_SIZE + 1;
-    for i in 0..chunk_count {
-        file.seek(SeekFrom::Start((i * consts::FILE_READ_CHUNK_SIZE) as u64)).await?;
+async fn with_file<F>(len: usize, mut file: File, mut op: F) -> io::Result<()>
+    where F: FnMut(Vec<u8>) -> io::Result<()>
+{
+    let chunk_count = (len - 1) / consts::FILE_READ_CHUNK_SIZE + 1;
+    for _ in 0..chunk_count {
         let mut chunk = vec![0; consts::FILE_READ_CHUNK_SIZE];
         file.read(&mut chunk).await?;
         op(chunk)?;
