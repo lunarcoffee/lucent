@@ -1,6 +1,6 @@
 use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 use crate::http::response::{Response, Status};
-use crate::http::message::Message;
+use crate::http::message::{Message, Body};
 use std::process::{Command, Stdio};
 use crate::{consts, log};
 use crate::http::request::{Request, HttpVersion};
@@ -112,7 +112,11 @@ impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
         }
 
         let mut script = script.spawn().ok()?;
-        &script.stdin.as_mut()?.write(&self.request.get_body_mut().as_ref().unwrap_or(&vec![])).ok()?;
+        let body = match &self.request.get_body_mut().as_ref() {
+            Some(Body::Bytes(bytes)) => bytes,
+            _ => return None,
+        };
+        &script.stdin.as_mut()?.write(body).ok()?;
         script.wait_with_output().ok()
     }
 

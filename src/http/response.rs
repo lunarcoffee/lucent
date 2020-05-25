@@ -8,7 +8,7 @@ use std::fmt::{Display, Formatter};
 use std::fmt;
 use num_enum::TryFromPrimitive;
 use crate::http::parser::{MessageParseResult, MessageParser};
-use crate::http::message::Message;
+use crate::http::message::{Message, Body};
 use crate::http::message;
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, TryFromPrimitive)]
@@ -86,7 +86,7 @@ pub struct Response {
     pub http_version: HttpVersion,
     pub status: Status,
     pub headers: Headers,
-    pub body: Option<Vec<u8>>,
+    pub body: Option<Body>,
     pub chunked: bool,
 }
 
@@ -105,11 +105,11 @@ impl Message for Response {
         &mut self.headers
     }
 
-    fn get_body_mut(&mut self) -> &mut Option<Vec<u8>> {
+    fn get_body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
 
-    fn into_body(self) -> Option<Vec<u8>> {
+    fn into_body(self) -> Option<Body> {
         self.body
     }
 

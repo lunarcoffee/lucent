@@ -4,6 +4,12 @@ use chrono::{DateTime, Utc, Local};
 
 use crate::consts;
 
+#[derive(Clone, Copy)]
+pub struct Range {
+    pub low: usize,
+    pub high: usize,
+}
+
 pub fn get_time_utc() -> DateTime<Utc> {
     SystemTime::now().into()
 }

@@ -2,13 +2,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use async_std::fs::{File, Metadata};
-use async_std::fs;
 use async_std::path::Path;
 use chrono::{DateTime, Utc};
 
 use crate::{log, util};
 use crate::consts;
-use crate::http::message::MessageBuilder;
+use crate::http::message::{MessageBuilder, Body};
 use crate::http::request::{Method, Request};
 use crate::http::response::{Response, Status};
 use crate::http::uri::Uri;
@@ -24,6 +23,7 @@ use crate::server::template::templates::Templates;
 use crate::server::config::route_spec::RouteSpec;
 use crate::server::config::route_replacement::RouteReplacement;
 use crate::server::middleware::basic_auth::BasicAuthChecker;
+use futures::AsyncReadExt;
 
 pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     config: &'a Config,
@@ -36,7 +36,7 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     target: String,
 
     response: MessageBuilder<Response>,
-    body: Vec<u8>,
+    body: Body,
     media_type: String,
 }
 
@@ -55,7 +55,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             target,
 
             response: MessageBuilder::<Response>::new(),
-            body: vec![],
+            body: Body::Bytes(vec![]),
             media_type: consts::H_MEDIA_BINARY.to_string(),
         }
     }
@@ -100,10 +100,10 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         if metadata.is_dir() {
             let target_trimmed = self.routed_target.strip_suffix('/').unwrap_or(&self.routed_target).to_string();
             self.media_type = consts::H_MEDIA_HTML.to_string();
-            self.body = DirectoryLister::new(&target_trimmed, &self.target, self.templates)
+            self.body = Body::Bytes(DirectoryLister::new(&target_trimmed, &self.target, self.templates)
                 .get_listing_body()
                 .await?
-                .into_bytes();
+                .into_bytes());
         } else {
             self.set_file_body(false, info, metadata).await?;
         }
@@ -134,24 +134,36 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
         self.media_type = util::media_type_by_ext(file_ext).to_string();
         if self.request.method != Method::Head {
-            self.body = fs::read(&self.target).await?;
+            self.body = Body::File(File::open(&self.target).await?);
             if can_send_range {
-                self.set_range_body()?;
+                self.set_range_body().await?;
             }
         }
         Ok(())
     }
 
-    fn set_range_body(&mut self) -> MiddlewareResult<()> {
-        match RangeParser::new(&self.request.headers, &self.body, &self.media_type).get_body() {
+    async fn set_range_body(&mut self) -> MiddlewareResult<()> {
+        let mut body_buf = vec![];
+        let body = match self.request.headers.get(consts::H_RANGE) {
+            Some(_) => match &self.body {
+                Body::Bytes(bytes) => bytes,
+                Body::File(file) => {
+                    file.clone().read(&mut body_buf).await?;
+                    &body_buf
+                }
+            },
+            _ => return Ok(()),
+        };
+
+        match RangeParser::new(&self.request.headers, body, &self.media_type).get_body() {
             Err(output) => return Err(output),
             Ok(RangeBody::Range(body, content_range)) => {
-                self.body = body;
+                self.body = Body::Bytes(body);
                 self.response.set_header(consts::H_CONTENT_RANGE, &content_range);
                 self.response.set_status(Status::PartialContent);
             }
             Ok(RangeBody::MultipartRange(body, media_type)) => {
-                self.body = body;
+                self.body = Body::Bytes(body);
                 self.media_type = media_type;
                 self.response.set_status(Status::PartialContent);
             }

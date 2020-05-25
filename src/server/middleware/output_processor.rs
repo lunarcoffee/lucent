@@ -3,7 +3,7 @@ use async_std::io::{self, Write};
 use crate::http::request::{Request, Method};
 use crate::log;
 use crate::consts;
-use crate::http::message::MessageBuilder;
+use crate::http::message::{MessageBuilder, Body};
 use crate::server::template::templates::Templates;
 use crate::server::template::{TemplateSubstitution, SubstitutionMap};
 use crate::server::middleware::MiddlewareOutput;
@@ -45,7 +45,7 @@ impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
         response
             .with_status(status)
             .with_header_multi(consts::H_ACCEPT, vec![&Method::Get.to_string(), &Method::Head.to_string()])
-            .with_body(body, consts::H_MEDIA_HTML)
+            .with_body(Body::Bytes(body), consts::H_MEDIA_HTML)
             .build()
             .send(self.writer)
             .await

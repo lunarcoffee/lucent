@@ -14,6 +14,7 @@ pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub const MAX_BODY_BEFORE_CHUNK: usize = 8_192;
 pub const CHUNK_SIZE: usize = 4_096;
+pub const FILE_READ_CHUNK_SIZE: usize = 65_536;
 pub const DIR_LISTING_VIEWABLE: &str = ".viewable";
 
 pub const TEMPLATE_ERROR: &str = "error.html";

@@ -11,7 +11,7 @@ use crate::http::response::{Status, Response};
 use futures::AsyncReadExt;
 use async_std::{prelude::Future, io};
 use std::convert::TryFrom;
-use crate::http::message::MessageBuilder;
+use crate::http::message::{MessageBuilder, Body};
 
 #[derive(Copy, Clone, Debug)]
 pub enum MessageParseError {
@@ -56,7 +56,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     pub async fn parse_request(&mut self) -> MessageParseResult<Request> {
         let (method, uri, http_version) = self.parse_request_line().await?;
         let headers = self.parse_headers(true).await?;
-        let body = self.parse_body(method, &headers).await?;
+        let body = self.parse_body(method, &headers).await?.map(|b| Body::Bytes(b));
 
         Ok(Request {
             method,
@@ -71,7 +71,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     pub async fn parse_response(&mut self) -> MessageParseResult<Response> {
         let (http_version, status) = self.parse_status_line().await?;
         let headers = self.parse_headers(false).await?;
-        let body = self.parse_body(Method::Post, &headers).await?;
+        let body = self.parse_body(Method::Post, &headers).await?.map(|b| Body::Bytes(b));
 
         Ok(Response {
             http_version,

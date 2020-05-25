@@ -6,25 +6,24 @@ use crate::http::uri::Uri;
 use crate::{util, consts};
 use async_std::io::Write;
 use async_std::io;
-use async_std::io::prelude::WriteExt;
+use async_std::io::prelude::{WriteExt, SeekExt, ReadExt};
+use async_std::fs::File;
+use async_std::io::SeekFrom;
+use async_std::task;
+
+pub enum Body {
+    Bytes(Vec<u8>),
+    File(File),
+}
 
 pub trait Message {
     fn get_headers_mut(&mut self) -> &mut Headers;
-    fn get_body_mut(&mut self) -> &mut Option<Vec<u8>>;
-    fn into_body(self) -> Option<Vec<u8>>;
+    fn get_body_mut(&mut self) -> &mut Option<Body>;
+    fn into_body(self) -> Option<Body>;
+    fn to_bytes_no_body(&self) -> Vec<u8>;
 
     fn is_chunked(&self) -> bool;
     fn set_chunked(&mut self);
-
-    fn to_bytes_no_body(&self) -> Vec<u8>;
-
-    fn into_bytes(self) -> Vec<u8> where Self: Sized {
-        let mut bytes = self.to_bytes_no_body();
-        if let Some(mut body) = self.into_body() {
-            bytes.append(&mut body);
-        }
-        bytes
-    }
 }
 
 pub struct MessageBuilder<M: Message> {
@@ -126,14 +125,22 @@ impl<M: Message> MessageBuilder<M> {
         self
     }
 
-    pub fn with_body(mut self, body: Vec<u8>, media_type: &str) -> Self {
-        if body.len() > consts::MAX_BODY_BEFORE_CHUNK {
-            self.message.set_chunked();
-            self = self
-                .with_header(consts::H_TRANSFER_ENCODING, consts::H_T_ENC_CHUNKED)
-                .without_header(consts::H_CONTENT_LENGTH);
-        } else {
-            self.set_header(consts::H_CONTENT_LENGTH, &body.len().to_string());
+    pub fn with_body(mut self, body: Body, media_type: &str) -> Self {
+        match &body {
+            Body::File(file) => {
+                let len = task::block_on(file.metadata()).unwrap().len().to_string();
+                self.set_header(consts::H_CONTENT_LENGTH, &len);
+            }
+            Body::Bytes(bytes) => {
+                if bytes.len() > consts::MAX_BODY_BEFORE_CHUNK {
+                    self.message.set_chunked();
+                    self = self
+                        .with_header(consts::H_TRANSFER_ENCODING, consts::H_T_ENC_CHUNKED)
+                        .without_header(consts::H_CONTENT_LENGTH);
+                } else {
+                    self.set_header(consts::H_CONTENT_LENGTH, &bytes.len().to_string());
+                }
+            }
         }
 
         *self.message.get_body_mut() = Some(body);
@@ -152,14 +159,17 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
             writer.flush().await
         }).await?;
 
-        if let Some(body) = message.into_body().map(|b| b.into_boxed_slice()) {
-            for chunk in body.chunks(consts::CHUNK_SIZE) {
-                let size = format!("{:x}\r\n", chunk.len()).into_bytes();
-                io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-                    writer.write(&size).await?;
-                    writer.write(chunk).await?;
-                    writer.write(b"\r\n").await
-                }).await?;
+        if let Some(body) = message.into_body() {
+            match body {
+                Body::Bytes(bytes) => {
+                    for chunk in bytes.chunks(consts::CHUNK_SIZE) {
+                        write_chunk(writer, chunk).await?;
+                    }
+                }
+                Body::File(mut file) => file_with_chunks(
+                    &mut file,
+                    |chunk| task::block_on(write_chunk(writer, &chunk)),
+                ).await?,
             }
             io::timeout(consts::MAX_WRITE_TIMEOUT, async {
                 writer.write(b"0\r\n\r\n").await?;
@@ -169,8 +179,41 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
         Ok(())
     } else {
         io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-            writer.write_all(&message.into_bytes()).await?;
-            writer.flush().await
+            writer.write_all(&message.to_bytes_no_body()).await?;
+            writer.flush().await?;
+
+            if let Some(body) = message.into_body() {
+                match body {
+                    Body::Bytes(bytes) => writer.write_all(&bytes).await?,
+                    Body::File(mut file) => file_with_chunks(
+                        &mut file,
+                        |chunk| task::block_on(writer.write_all(&chunk)),
+                    ).await?,
+                }
+                writer.flush().await?;
+            }
+            Ok(())
         }).await
     }
+}
+
+async fn file_with_chunks<F: FnMut(Vec<u8>) -> io::Result<()>>(file: &mut File, mut op: F) -> io::Result<()> {
+    let chunk_count = (file.metadata().await?.len() as usize - 1) / consts::FILE_READ_CHUNK_SIZE + 1;
+    for i in 0..chunk_count {
+        file.seek(SeekFrom::Start((i * consts::FILE_READ_CHUNK_SIZE) as u64)).await?;
+        let mut chunk = vec![0; consts::FILE_READ_CHUNK_SIZE];
+        file.read(&mut chunk).await?;
+        op(chunk)?;
+    }
+    Ok(())
+}
+
+async fn write_chunk(writer: &mut (impl Write + Unpin), chunk: &[u8]) -> io::Result<()> {
+    let size = format!("{:x}\r\n", chunk.len()).into_bytes();
+    io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+        writer.write(&size).await?;
+        writer.write(chunk).await?;
+        writer.write(b"\r\n").await?;
+        Ok(())
+    }).await
 }

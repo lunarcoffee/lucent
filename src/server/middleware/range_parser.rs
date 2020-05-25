@@ -3,17 +3,12 @@ use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
 use crate::consts;
 use crate::http::response::Status;
 use crate::util;
+use crate::util::Range;
 
 pub enum RangeBody {
     Entire,
     Range(Vec<u8>, String),
     MultipartRange(Vec<u8>, String),
-}
-
-#[derive(Clone, Copy)]
-pub struct Range {
-    low: usize,
-    high: usize,
 }
 
 pub struct RangeParser<'a, 'b, 'c> {
