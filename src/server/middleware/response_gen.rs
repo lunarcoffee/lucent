@@ -23,6 +23,7 @@ use crate::server::template::templates::Templates;
 use crate::server::config::route_spec::RouteSpec;
 use crate::server::config::route_replacement::RouteReplacement;
 use crate::server::middleware::basic_auth::BasicAuthChecker;
+use async_std::io::{prelude::SeekExt, SeekFrom};
 use futures::AsyncReadExt;
 
 pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
@@ -98,9 +99,8 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
         }
 
         if metadata.is_dir() {
-            let target_trimmed = self.routed_target.strip_suffix('/').unwrap_or(&self.routed_target).to_string();
             self.media_type = consts::H_MEDIA_HTML.to_string();
-            self.body = Body::Bytes(DirectoryLister::new(&target_trimmed, &self.target, self.templates)
+            self.body = Body::Bytes(DirectoryLister::new(&self.routed_target, &self.target, self.templates)
                 .get_listing_body()
                 .await?
                 .into_bytes());
@@ -148,7 +148,7 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
             Some(_) => match &self.body {
                 Body::Bytes(bytes) => bytes,
                 Body::File(file) => {
-                    file.clone().read(&mut body_buf).await?;
+                    file.clone().read_to_end(&mut body_buf).await?;
                     &body_buf
                 }
             },
