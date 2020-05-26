@@ -156,12 +156,10 @@ impl<M: Message> MessageBuilder<M> {
 pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> io::Result<()> {
     io::timeout(consts::MAX_WRITE_TIMEOUT, async {
         writer.write_all(&message.to_bytes_no_body()).await?;
-        writer.flush().await
-    }).await?;
+        writer.flush().await?;
 
-    let chunked = message.is_chunked();
-    if let Some(body) = message.into_body() {
-        io::timeout(consts::MAX_WRITE_TIMEOUT, async {
+        let chunked = message.is_chunked();
+        if let Some(body) = message.into_body() {
             match body {
                 Body::Stream(file, len) => with_file(len, file, |c| task::block_on(writer.write_all(&c))).await?,
                 Body::Bytes(bytes) => {
@@ -169,26 +167,25 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
                         for chunk in bytes.chunks(consts::CHUNK_SIZE) {
                             write_chunk(writer, chunk).await?;
                         }
-                        io::timeout(consts::MAX_WRITE_TIMEOUT, writer.write(b"0\r\n\r\n")).await?;
+                        writer.write_all(b"0\r\n\r\n").await?;
                     } else {
                         writer.write_all(&bytes).await?;
                     }
                 }
             }
             writer.flush().await?;
-            Ok(())
-        }).await?;
-    }
-    Ok(())
+        }
+        Ok(())
+    }).await
 }
 
-async fn with_file<F>(len: usize, mut file: File, mut op: F) -> io::Result<()>
-    where F: FnMut(Vec<u8>) -> io::Result<()>
-{
-    let chunk_count = (len - 1) / consts::FILE_READ_CHUNK_SIZE + 1;
-    for _ in 0..chunk_count {
-        let mut chunk = vec![0; consts::FILE_READ_CHUNK_SIZE];
-        file.read(&mut chunk).await?;
+async fn with_file<F: FnMut(Vec<u8>) -> io::Result<()>>(len: usize, mut file: File, mut op: F) -> io::Result<()> {
+    const CHUNK_SIZE: usize = consts::READ_CHUNK_SIZE;
+    let chunk_count = (len - 1) / CHUNK_SIZE + 1;
+
+    for chunk_n in 0..chunk_count {
+        let mut chunk = vec![0; if chunk_n == chunk_count - 1 { len % CHUNK_SIZE } else { CHUNK_SIZE }];
+        file.read_exact(&mut chunk).await?;
         op(chunk)?;
     }
     Ok(())
@@ -196,10 +193,8 @@ async fn with_file<F>(len: usize, mut file: File, mut op: F) -> io::Result<()>
 
 async fn write_chunk(writer: &mut (impl Write + Unpin), chunk: &[u8]) -> io::Result<()> {
     let size = format!("{:x}\r\n", chunk.len()).into_bytes();
-    io::timeout(consts::MAX_WRITE_TIMEOUT, async {
-        writer.write(&size).await?;
-        writer.write(chunk).await?;
-        writer.write(b"\r\n").await?;
-        Ok(())
-    }).await
+    writer.write_all(&size).await?;
+    writer.write_all(chunk).await?;
+    writer.write_all(b"\r\n").await?;
+    Ok(())
 }
