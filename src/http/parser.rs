@@ -1,17 +1,19 @@
-use std::error;
-use async_std::io::{BufRead, Write};
-use crate::http::request::{Request, HttpVersion, Method};
-use crate::http::uri::Uri;
-use async_std::io::prelude::BufReadExt;
-use crate::http::headers::Headers;
 use std::collections::HashMap;
-use crate::http::headers;
-use crate::consts;
-use crate::http::response::{Status, Response};
-use futures::AsyncReadExt;
-use async_std::{prelude::Future, io};
 use std::convert::TryFrom;
-use crate::http::message::{MessageBuilder, Body};
+use std::error;
+
+use async_std::{io, prelude::Future};
+use async_std::io::{BufRead, Write};
+use async_std::io::prelude::BufReadExt;
+use futures::AsyncReadExt;
+
+use crate::consts;
+use crate::http::headers;
+use crate::http::headers::Headers;
+use crate::http::message::{Body, MessageBuilder};
+use crate::http::request::{HttpVersion, Method, Request};
+use crate::http::response::{Response, Status};
+use crate::http::uri::Uri;
 
 #[derive(Copy, Clone, Debug)]
 pub enum MessageParseError {
@@ -267,11 +269,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
 
     async fn read_until_space(&mut self, buf: &mut Vec<u8>) -> MessageParseResult<usize> {
         let result = with_timeout(self.reader.read_until(b' ', buf)).await;
-        if buf.is_empty() {
-            Err(MessageParseError::EndOfStream)
-        } else {
-            result
-        }
+        if buf.is_empty() { Err(MessageParseError::EndOfStream) } else { result }
     }
 }
 

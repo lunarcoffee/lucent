@@ -1,15 +1,16 @@
-use async_std::io;
-use async_std::io::prelude::Read;
-
-use crate::http::headers::Headers;
-use crate::http::request::HttpVersion;
-use async_std::io::{Write, BufReader, BufWriter};
 use std::fmt::{Display, Formatter};
 use std::fmt;
+
+use async_std::io;
+use async_std::io::{BufReader, BufWriter, Write};
+use async_std::io::prelude::Read;
 use num_enum::TryFromPrimitive;
-use crate::http::parser::{MessageParseResult, MessageParser};
-use crate::http::message::{Message, Body};
+
+use crate::http::headers::Headers;
+use crate::http::message::{Body, Message};
 use crate::http::message;
+use crate::http::parser::{MessageParser, MessageParseResult};
+use crate::http::request::HttpVersion;
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, TryFromPrimitive)]
 #[repr(usize)]
@@ -113,15 +114,15 @@ impl Message for Response {
         self.body
     }
 
+    fn to_bytes_no_body(&self) -> Vec<u8> {
+        format!("{} {}\r\n{:?}\r\n\r\n", self.http_version, self.status, self.headers).into_bytes()
+    }
+
     fn is_chunked(&self) -> bool {
         self.chunked
     }
 
     fn set_chunked(&mut self) {
         self.chunked = true;
-    }
-
-    fn to_bytes_no_body(&self) -> Vec<u8> {
-        format!("{} {}\r\n{:?}\r\n\r\n", self.http_version, self.status, self.headers).into_bytes()
     }
 }

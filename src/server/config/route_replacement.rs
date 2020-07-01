@@ -1,7 +1,8 @@
-use serde::{Deserialize, Deserializer, de};
-use crate::server::template::Template;
+use serde::{de, Deserialize, Deserializer};
 use serde::de::Visitor;
-use serde::export::{Formatter, fmt};
+use serde::export::{fmt, Formatter};
+
+use crate::server::template::Template;
 
 #[derive(Clone)]
 pub struct RouteReplacement(pub Template);

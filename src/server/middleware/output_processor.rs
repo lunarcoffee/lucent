@@ -1,22 +1,23 @@
-use crate::http::response::{Status, Response};
 use async_std::io::{self, Write};
-use crate::http::request::{Request, Method};
-use crate::log;
-use crate::consts;
-use crate::http::message::{MessageBuilder, Body};
-use crate::server::template::templates::Templates;
-use crate::server::template::{TemplateSubstitution, SubstitutionMap};
-use crate::server::middleware::MiddlewareOutput;
 use async_std::io::prelude::WriteExt;
 
-pub struct OutputProcessor<'a, 'b, 'c, W: Write + Unpin> {
+use crate::consts;
+use crate::http::message::{Body, MessageBuilder};
+use crate::http::request::{Method, Request};
+use crate::http::response::{Response, Status};
+use crate::log;
+use crate::server::middleware::MiddlewareOutput;
+use crate::server::template::{SubstitutionMap, TemplateSubstitution};
+use crate::server::template::templates::Templates;
+
+pub struct OutputProcessor<'a, W: Write + Unpin> {
     writer: &'a mut W,
-    templates: &'b Templates,
-    request: Option<&'c Request>,
+    templates: &'a Templates,
+    request: Option<&'a Request>,
 }
 
-impl<'a, 'b, 'c, W: Write + Unpin> OutputProcessor<'a, 'b, 'c, W> {
-    pub fn new(writer: &'a mut W, templates: &'b Templates, request: Option<&'c Request>) -> Self {
+impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
+    pub fn new(writer: &'a mut W, templates: &'a Templates, request: Option<&'a Request>) -> Self {
         OutputProcessor { writer, templates, request }
     }
 

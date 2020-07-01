@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
-use crate::http::headers::Headers;
+
 use crate::consts;
-use crate::util;
+use crate::http::headers::Headers;
 use crate::http::response::Status;
-use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::util;
 
 pub struct CondInfo {
     pub etag: Option<String>,
@@ -16,13 +17,13 @@ impl CondInfo {
     }
 }
 
-pub struct ConditionalChecker<'a, 'b> {
+pub struct ConditionalChecker<'a> {
     info: &'a CondInfo,
-    headers: &'b Headers,
+    headers: &'a Headers,
 }
 
-impl ConditionalChecker<'_, '_> {
-    pub fn new<'a, 'b>(info: &'a CondInfo, headers: &'b Headers) -> ConditionalChecker<'a, 'b> {
+impl<'a> ConditionalChecker<'a> {
+    pub fn new(info: &'a CondInfo, headers: &'a Headers) -> Self {
         ConditionalChecker { info, headers }
     }
 
@@ -71,18 +72,17 @@ impl ConditionalChecker<'_, '_> {
     }
 
     fn check_range_header(&self) -> bool {
-        if !self.headers.contains(consts::H_RANGE) {
-            return true;
-        }
-        if let Some(etag_or_date) = self.headers.get(consts::H_IF_RANGE) {
-            let etag_or_date = &etag_or_date[0];
-            if let Some(since) = util::parse_time_imf(etag_or_date) {
-                if let Some(last_modified) = self.info.last_modified {
-                    return last_modified <= since;
-                }
-            } else if etag_or_date.starts_with("\"") && etag_or_date.ends_with("\"") {
-                if let Some(etag) = &self.info.etag {
-                    return etag_or_date == etag;
+        if self.headers.contains(consts::H_RANGE) {
+            if let Some(etag_or_date) = self.headers.get(consts::H_IF_RANGE) {
+                let etag_or_date = &etag_or_date[0];
+                if let Some(since) = util::parse_time_imf(etag_or_date) {
+                    if let Some(last_modified) = self.info.last_modified {
+                        return last_modified <= since;
+                    }
+                } else if etag_or_date.starts_with("\"") && etag_or_date.ends_with("\"") {
+                    if let Some(etag) = &self.info.etag {
+                        return etag_or_date == etag;
+                    }
                 }
             }
         }

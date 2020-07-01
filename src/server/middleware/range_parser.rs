@@ -1,11 +1,12 @@
-use crate::http::headers::Headers;
-use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
+use async_std::io::prelude::ReadExt;
+
 use crate::consts;
+use crate::http::headers::Headers;
+use crate::http::message::Body;
 use crate::http::response::Status;
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::util;
 use crate::util::Range;
-use crate::http::message::Body;
-use async_std::io::prelude::ReadExt;
 
 pub enum RangeBody {
     Entire,
@@ -13,15 +14,15 @@ pub enum RangeBody {
     MultipartRange(Vec<u8>, String),
 }
 
-pub struct RangeParser<'a, 'b, 'c> {
+pub struct RangeParser<'a> {
     headers: &'a Headers,
-    body: &'b mut Body,
+    body: &'a mut Body,
     body_len: usize,
-    media_type: &'c str,
+    media_type: &'a str,
 }
 
-impl<'a, 'b, 'c> RangeParser<'a, 'b, 'c> {
-    pub async fn new(headers: &'a Headers, body: &'b mut Body, media_type: &'c str) -> RangeParser<'a, 'b, 'c> {
+impl<'a> RangeParser<'a> {
+    pub async fn new(headers: &'a Headers, body: &'a mut Body, media_type: &'a str) -> RangeParser<'a> {
         let body_len = body.len().await;
         RangeParser {
             headers,
@@ -70,12 +71,7 @@ impl<'a, 'b, 'c> RangeParser<'a, 'b, 'c> {
                 Range { low, high }
             }
         };
-
-        if range.high <= self.body_len {
-            Some(range)
-        } else {
-            None
-        }
+        if range.high <= self.body_len { Some(range) } else { None }
     }
 
     async fn multipart_range_body(&mut self, ranges: Vec<Range>, sep: String) -> Vec<u8> {
@@ -85,7 +81,7 @@ impl<'a, 'b, 'c> RangeParser<'a, 'b, 'c> {
             Body::Stream(reader, len) => {
                 body.reserve(*len);
                 reader.read_exact(&mut body).await.map(|_| ()).unwrap_or(());
-            },
+            }
         }
 
         let mut new_body = vec![];

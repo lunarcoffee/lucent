@@ -1,6 +1,7 @@
-use crate::server::template::Template;
 use async_std::fs;
+
 use crate::consts;
+use crate::server::template::Template;
 
 #[derive(Clone)]
 pub struct Templates {

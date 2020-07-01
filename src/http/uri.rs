@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::fmt;
 
 use crate::consts;
+use crate::http::parser::{MessageParseError, MessageParseResult};
 use crate::http::request::Method;
-use crate::http::parser::{MessageParseResult, MessageParseError};
 use crate::util;
 
 pub struct Authority {
@@ -206,7 +206,7 @@ impl UriParser<'_, '_> {
 }
 
 fn is_query_string(str: &str) -> bool {
-    str.chars().all(|c| is_query_char(c))
+    str.chars().all(is_query_char)
 }
 
 fn is_query_char(ch: char) -> bool {

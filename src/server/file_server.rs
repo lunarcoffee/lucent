@@ -7,6 +7,7 @@ use async_std::prelude::StreamExt;
 use async_std::sync::{self, Receiver, Sender};
 use async_std::task;
 use futures::{FutureExt, select};
+use futures::io::ErrorKind;
 
 use crate::consts;
 use crate::http::request::{HttpVersion, Request};
@@ -17,7 +18,6 @@ use crate::server::middleware::request_verifier::RequestVerifier;
 use crate::server::middleware::response_gen::ResponseGenerator;
 use crate::server::Server;
 use crate::server::template::templates::Templates;
-use futures::io::ErrorKind;
 
 pub struct ConnInfo {
     pub remote_addr: SocketAddr,
@@ -53,11 +53,11 @@ impl FileServer {
         let (stop_sender, stop_receiver) = sync::channel(1);
         let listener = match TcpListener::bind(&config.address).await {
             Ok(listener) => listener,
-            Err(e) => return match e.kind() {
-                ErrorKind::AddrInUse => Err(FileServerStartError::AddressInUse),
-                ErrorKind::AddrNotAvailable => Err(FileServerStartError::AddressUnavailable),
-                _ => Err(FileServerStartError::CannotBindAddress),
-            }
+            Err(e) => return Err(match e.kind() {
+                ErrorKind::AddrInUse => FileServerStartError::AddressInUse,
+                ErrorKind::AddrNotAvailable => FileServerStartError::AddressUnavailable,
+                _ => FileServerStartError::CannotBindAddress,
+            }),
         };
 
         if !Path::new(&file_root).is_dir().await {
@@ -91,7 +91,7 @@ impl FileServer {
                 }
             }
         }
-        log::info("Server exiting.");
+        log::info("Server stopped.");
         Ok(())
     }
 

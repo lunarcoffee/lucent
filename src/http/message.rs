@@ -1,14 +1,16 @@
-use crate::http::request::{Request, Method, HttpVersion};
-use crate::http::response::{Response, Status};
-use crate::http::headers::Headers;
 use std::collections::HashMap;
-use crate::http::uri::Uri;
-use crate::{util, consts};
-use async_std::io::Write;
-use async_std::io;
-use async_std::io::prelude::{WriteExt, ReadExt};
+
 use async_std::fs::File;
+use async_std::io;
+use async_std::io::prelude::{ReadExt, WriteExt};
+use async_std::io::Write;
 use async_std::task;
+
+use crate::{consts, util};
+use crate::http::headers::Headers;
+use crate::http::request::{HttpVersion, Method, Request};
+use crate::http::response::{Response, Status};
+use crate::http::uri::Uri;
 
 pub enum Body {
     Bytes(Vec<u8>),
@@ -180,11 +182,10 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
 }
 
 async fn with_file<F: FnMut(Vec<u8>) -> io::Result<()>>(len: usize, mut file: File, mut op: F) -> io::Result<()> {
-    const CHUNK_SIZE: usize = consts::READ_CHUNK_SIZE;
-    let chunk_count = (len - 1) / CHUNK_SIZE + 1;
-
-    for chunk_n in 0..chunk_count {
-        let mut chunk = vec![0; if chunk_n == chunk_count - 1 { len % CHUNK_SIZE } else { CHUNK_SIZE }];
+    let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
+    for n in 0..chunk_count {
+        let chunk_len = if n == chunk_count - 1 { len % consts::READ_CHUNK_SIZE } else { consts::READ_CHUNK_SIZE };
+        let mut chunk = vec![0; chunk_len];
         file.read_exact(&mut chunk).await?;
         op(chunk)?;
     }

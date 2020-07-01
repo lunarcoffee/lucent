@@ -2,10 +2,11 @@
 
 use std::env;
 
+use async_std::sync::Arc;
+
+use crate::server::config::Config;
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
-use crate::server::config::Config;
-use async_std::sync::Arc;
 
 mod server;
 mod log;
@@ -23,20 +24,20 @@ async fn main() {
 
     let config = match Config::load(&args.nth(1).unwrap()).await {
         Some(config) => config,
-        _ => log::fatal("Configuration file invalid, or missing settings!"),
+        _ => log::fatal("Configuration file invalid or missing required settings!"),
     };
 
-    match FileServer::new(config).await {
+    log::fatal(match FileServer::new(config).await {
         Ok(server) => {
             let server = Arc::new(server);
             let server_clone = Arc::clone(&server);
             let _ = ctrlc::set_handler(move || server_clone.stop());
-            server.start();
+            return server.start();
         }
-        Err(FileServerStartError::InvalidFileRoot) => log::fatal("File directory invalid!"),
-        Err(FileServerStartError::InvalidTemplates) => log::fatal("Template directory invalid, or missing templates!"),
-        Err(FileServerStartError::AddressInUse) => log::fatal("That address is in use!"),
-        Err(FileServerStartError::AddressUnavailable) => log::fatal("That address is unavailable!"),
-        _ => log::fatal("Cannot bind to that address!"),
-    }
+        Err(FileServerStartError::InvalidFileRoot) => "File directory invalid!",
+        Err(FileServerStartError::InvalidTemplates) => "Template directory invalid or incomplete!",
+        Err(FileServerStartError::AddressInUse) => "That address is in use!",
+        Err(FileServerStartError::AddressUnavailable) => "That address is unavailable!",
+        _ => "Cannot bind to that address!",
+    });
 }

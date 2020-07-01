@@ -1,16 +1,18 @@
-use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
-use crate::http::response::{Response, Status};
-use crate::http::message::{Message, Body};
-use std::process::{Command, Stdio};
-use crate::{consts, log};
-use crate::http::request::{Request, HttpVersion};
-use crate::http::uri::Uri;
-use crate::server::file_server::ConnInfo;
-use async_std::process::Output;
-use crate::server::config::Config;
-use async_std::path::Path;
 use std::io::Write;
+use std::process::{Command, Stdio};
+
+use async_std::path::Path;
+use async_std::process::Output;
 use futures::AsyncReadExt;
+
+use crate::{consts, log};
+use crate::http::message::{Body, Message};
+use crate::http::request::{HttpVersion, Request};
+use crate::http::response::{Response, Status};
+use crate::http::uri::Uri;
+use crate::server::config::Config;
+use crate::server::file_server::ConnInfo;
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];
 pub const CGI_VARS: &[&str] = &[
@@ -22,16 +24,16 @@ pub const CGI_VARS: &[&str] = &[
     consts::CGI_VAR_SERVER_PROTOCOL, consts::CGI_VAR_SERVER_SOFTWARE,
 ];
 
-pub struct CgiRunner<'a, 'b, 'c, 'd> {
+pub struct CgiRunner<'a> {
     script_path: &'a str,
-    request: &'b mut Request,
-    conn_info: &'c ConnInfo,
-    config: &'d Config,
+    request: &'a mut Request,
+    conn_info: &'a ConnInfo,
+    config: &'a Config,
     is_nph: bool,
 }
 
-impl<'a, 'b, 'c, 'd> CgiRunner<'a, 'b, 'c, 'd> {
-    pub fn new(path: &'a str, request: &'b mut Request, conn: &'c ConnInfo, config: &'d Config, is_nph: bool) -> Self {
+impl<'a> CgiRunner<'a> {
+    pub fn new(path: &'a str, request: &'a mut Request, conn: &'a ConnInfo, config: &'a Config, is_nph: bool) -> Self {
         CgiRunner {
             script_path: path,
             request,

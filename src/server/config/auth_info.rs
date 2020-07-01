@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer};
-use serde::de::{Visitor, SeqAccess, Error};
-use serde::export::{Formatter, fmt};
+use serde::de::{Error, SeqAccess, Visitor};
+use serde::export::{fmt, Formatter};
 
 #[derive(Clone)]
 pub struct Credentials {

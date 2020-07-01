@@ -1,5 +1,6 @@
-use crate::http::response::{Status, Response};
 use std::error;
+
+use crate::http::response::{Response, Status};
 
 pub mod output_processor;
 pub mod request_verifier;

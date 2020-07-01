@@ -2,35 +2,35 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use async_std::fs::{File, Metadata};
+use async_std::io::{prelude::SeekExt, SeekFrom};
 use async_std::path::Path;
 use chrono::{DateTime, Utc};
 
 use crate::{log, util};
 use crate::consts;
-use crate::http::message::{MessageBuilder, Body};
+use crate::http::message::{Body, MessageBuilder};
 use crate::http::request::{Method, Request};
 use crate::http::response::{Response, Status};
 use crate::http::uri::Uri;
 use crate::server::config::Config;
+use crate::server::config::route_replacement::RouteReplacement;
+use crate::server::config::route_spec::RouteSpec;
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::server::middleware::basic_auth::BasicAuthChecker;
 use crate::server::middleware::cgi_runner::CgiRunner;
-use crate::server::middleware::cond_checker::{ConditionalChecker, CondInfo};
+use crate::server::middleware::cond_checker::{CondInfo, ConditionalChecker};
 use crate::server::middleware::dir_lister::DirectoryLister;
 use crate::server::middleware::range_parser::{RangeBody, RangeParser};
 use crate::server::template::{SubstitutionMap, TemplateSubstitution};
 use crate::server::template::templates::Templates;
-use crate::server::config::route_spec::RouteSpec;
-use crate::server::config::route_replacement::RouteReplacement;
-use crate::server::middleware::basic_auth::BasicAuthChecker;
-use async_std::io::{prelude::SeekExt, SeekFrom};
 
-pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
+pub struct ResponseGenerator<'a> {
     config: &'a Config,
-    templates: &'b Templates,
+    templates: &'a Templates,
 
-    request: &'c mut Request,
-    conn_info: &'d ConnInfo,
+    request: &'a mut Request,
+    conn_info: &'a ConnInfo,
     raw_target: String,
     routed_target: String,
     target: String,
@@ -40,8 +40,8 @@ pub struct ResponseGenerator<'a, 'b, 'c, 'd> {
     media_type: String,
 }
 
-impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
-    pub fn new(config: &'a Config, templates: &'b Templates, request: &'c mut Request, conn: &'d ConnInfo) -> Self {
+impl<'a> ResponseGenerator<'a> {
+    pub fn new(config: &'a Config, templates: &'a Templates, request: &'a mut Request, conn: &'a ConnInfo) -> Self {
         let (raw_target, routed_target, target) = rewrite_url(request, config);
 
         ResponseGenerator {
@@ -91,10 +91,10 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
 
     async fn set_body(&mut self, info: &CondInfo, metadata: &Metadata) -> MiddlewareResult<()> {
         if self.request.method != Method::Get && self.request.method != Method::Head {
-            return match self.set_file_body(true, info, metadata).await {
-                Err(e) => Err(e),
-                _ => Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false)),
-            };
+            return self
+                .set_file_body(true, info, metadata)
+                .await
+                .and(Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false)));
         }
 
         if metadata.is_dir() {
@@ -121,23 +121,22 @@ impl<'a, 'b, 'c, 'd> ResponseGenerator<'a, 'b, 'c, 'd> {
                 .get_response()
                 .await?;
         }
-        if cgi {
-            return Ok(());
-        }
 
-        let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
-            Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
-            Err(output) if !metadata.is_dir() => return Err(output),
-            _ => true,
-        };
+        if !cgi {
+            let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
+                Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
+                Err(output) if !metadata.is_dir() => return Err(output),
+                _ => true,
+            };
 
-        self.media_type = util::media_type_by_ext(file_ext).to_string();
-        if self.request.method != Method::Head {
-            let file = File::open(&self.target).await?;
-            let len = file.metadata().await?.len();
-            self.body = Body::Stream(file, len as usize);
-            if can_send_range {
-                self.set_range_body().await?;
+            self.media_type = util::media_type_by_ext(file_ext).to_string();
+            if self.request.method != Method::Head {
+                let file = File::open(&self.target).await?;
+                let len = file.metadata().await?.len();
+                self.body = Body::Stream(file, len as usize);
+                if can_send_range {
+                    self.set_range_body().await?;
+                }
             }
         }
         Ok(())

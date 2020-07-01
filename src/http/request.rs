@@ -1,14 +1,14 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-use async_std::io::{self, BufReader, Write, BufWriter};
+use async_std::io::{self, BufReader, BufWriter, Write};
 use async_std::io::prelude::Read;
 
 use crate::http::headers::Headers;
-use crate::http::uri::Uri;
-use crate::http::parser::{MessageParser, MessageParseResult};
-use crate::http::message::{Message, Body};
+use crate::http::message::{Body, Message};
 use crate::http::message;
+use crate::http::parser::{MessageParser, MessageParseResult};
+use crate::http::uri::Uri;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Method {
@@ -24,7 +24,7 @@ pub enum Method {
 
 impl Display for Method {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let method = match self {
+        write!(f, "{}", match self {
             Method::Get => "GET",
             Method::Head => "HEAD",
             Method::Post => "POST",
@@ -33,8 +33,7 @@ impl Display for Method {
             Method::Connect => "CONNECT",
             Method::Options => "OPTIONS",
             Method::Trace => "TRACE",
-        };
-        write!(f, "{}", method)
+        })
     }
 }
 
@@ -47,12 +46,11 @@ pub enum HttpVersion {
 
 impl Display for HttpVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let version = match self {
+        write!(f, "HTTP/{}", match self {
             HttpVersion::Http09 => "0.9",
             HttpVersion::Http10 => "1.0",
             HttpVersion::Http11 => "1.1",
-        };
-        write!(f, "HTTP/{}", version)
+        })
     }
 }
 
@@ -88,15 +86,15 @@ impl Message for Request {
         self.body
     }
 
+    fn to_bytes_no_body(&self) -> Vec<u8> {
+        format!("{} {} {}\r\n{:?}\r\n\r\n", self.method, self.uri, self.http_version, self.headers).into_bytes()
+    }
+
     fn is_chunked(&self) -> bool {
         self.chunked
     }
 
     fn set_chunked(&mut self) {
         self.chunked = true;
-    }
-
-    fn to_bytes_no_body(&self) -> Vec<u8> {
-        format!("{} {} {}\r\n{:?}\r\n\r\n", self.method, self.uri, self.http_version, self.headers).into_bytes()
     }
 }

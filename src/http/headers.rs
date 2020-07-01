@@ -34,7 +34,7 @@ impl Headers {
     }
 
     pub fn set_one(&mut self, name: &str, value: &str) -> bool {
-        if !is_token_string(name) || !is_valid_header_value(value) {
+        if !is_token_string(name) || !is_valid_header_value(&value) {
             false
         } else {
             self.headers.insert(Self::normalize_header_name(name), vec![value.to_string()]);
@@ -43,7 +43,7 @@ impl Headers {
     }
 
     pub fn set(&mut self, name: &str, values: Vec<&str>) -> bool {
-        if !is_token_string(name) || values.iter().any(|v| !is_valid_header_value(v)) {
+        if !is_token_string(name) || !values.iter().all(is_valid_header_value) {
             false
         } else {
             let values = values.iter().map(|s| s.to_string()).collect();
@@ -77,7 +77,7 @@ impl Debug for Headers {
     }
 }
 
-fn is_valid_header_value(str: &str) -> bool {
+fn is_valid_header_value(str: &&str) -> bool {
     str.chars().all(|c| util::is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
 }
 
@@ -88,5 +88,5 @@ fn is_token_char(ch: char) -> bool {
 }
 
 pub fn is_token_string(str: &str) -> bool {
-    str.chars().all(|c| is_token_char(c))
+    str.chars().all(is_token_char)
 }

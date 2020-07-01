@@ -1,4 +1,4 @@
-use crate::server::template::{TemplatePart, Template};
+use crate::server::template::{Template, TemplatePart};
 
 pub struct TemplateParser {
     file: String,
@@ -23,7 +23,7 @@ impl TemplateParser {
         let mut pos = 0;
 
         while pos < chars.len() {
-            let part = match chars[pos] {
+            self.parts.push(match chars[pos] {
                 '[' => {
                     let end_index = chars[pos..].iter().position(|c| *c == ']')? + pos;
                     let name = chars[pos + 1..end_index].iter().collect();
@@ -31,7 +31,7 @@ impl TemplateParser {
                     pos = end_index + 1;
                     TemplatePart::Placeholder(name)
                 }
-                '~' => {
+                '*' => {
                     let start_index = chars[pos..].iter().position(|c| *c == '[')? + pos;
                     let mut depth = 0;
                     let end_index = chars[start_index + 1..].iter().position(|c| {
@@ -46,10 +46,14 @@ impl TemplateParser {
                     pos = end_index + 1;
                     TemplatePart::MultiplePlaceholder(name, parts)
                 }
+                '\\' => {
+                    pos += 2;
+                    TemplatePart::String(chars[pos - 1].to_string())
+                }
                 _ => {
                     let start_of_next_part = chars[pos..]
                         .iter()
-                        .position(|c| *c == '[' || *c == '~')
+                        .position(|c| "[*\\".contains(*c))
                         .unwrap_or(chars.len() - pos)
                         + pos;
                     let text = chars[pos..start_of_next_part].iter().collect();
@@ -57,8 +61,7 @@ impl TemplateParser {
                     pos = start_of_next_part;
                     TemplatePart::String(text)
                 }
-            };
-            self.parts.push(part);
+            });
         }
         Some(self.parts)
     }

@@ -1,5 +1,6 @@
-use crate::server::template::template_parser::TemplateParser;
 use std::collections::HashMap;
+
+use crate::server::template::template_parser::TemplateParser;
 
 pub mod templates;
 

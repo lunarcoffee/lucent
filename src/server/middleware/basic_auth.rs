@@ -1,21 +1,22 @@
-use crate::http::request::Request;
-use crate::server::config::Config;
-use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
-use crate::server::config::route_spec::RouteSpec;
-use crate::server::config::auth_info::AuthInfo;
-use crate::{consts, log};
-use crate::http::message::MessageBuilder;
-use crate::http::response::Response;
-use crate::http::response::Status;
 use pwhash::bcrypt;
 
-pub struct BasicAuthChecker<'a, 'b> {
+use crate::{consts, log};
+use crate::http::message::MessageBuilder;
+use crate::http::request::Request;
+use crate::http::response::Response;
+use crate::http::response::Status;
+use crate::server::config::auth_info::AuthInfo;
+use crate::server::config::Config;
+use crate::server::config::route_spec::RouteSpec;
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+
+pub struct BasicAuthChecker<'a> {
     request: &'a Request,
-    config: &'b Config,
+    config: &'a Config,
 }
 
-impl<'a, 'b> BasicAuthChecker<'a, 'b> {
-    pub fn new(request: &'a Request, config: &'b Config) -> Self {
+impl<'a> BasicAuthChecker<'a> {
+    pub fn new(request: &'a Request, config: &'a Config) -> Self {
         BasicAuthChecker { request, config }
     }
 
@@ -33,30 +34,29 @@ impl<'a, 'b> BasicAuthChecker<'a, 'b> {
     }
 
     fn check_auth_header(&self, auth: &Vec<String>, auth_info: &AuthInfo) -> MiddlewareResult<bool> {
+        let challenge = self.www_authenticate_output(auth_info);
+
         let auth = auth[0].splitn(2, ' ').collect::<Vec<_>>();
-        if auth.len() < 2 || !auth[0].eq_ignore_ascii_case(consts::H_AUTH_BASIC) {
-            return self.www_authenticate_output(auth_info);
-        }
+        if auth.len() > 1 && auth[0].eq_ignore_ascii_case(consts::H_AUTH_BASIC) {
+            let encoded_credentials = &auth[1];
+            let maybe_credentials = base64::decode(encoded_credentials).map(|c| String::from_utf8(c));
+            let credentials = match maybe_credentials {
+                Ok(Ok(c)) => c,
+                _ => return challenge,
+            };
 
-        let encoded_credentials = &auth[1];
-        let maybe_credentials = base64::decode(encoded_credentials).map(|c| String::from_utf8(c));
-        let credentials = match maybe_credentials {
-            Ok(Ok(c)) => c,
-            _ => return self.www_authenticate_output(auth_info),
-        };
-        let credentials = credentials.splitn(2, ':').collect::<Vec<_>>();
-        if credentials.len() < 2 {
-            return self.www_authenticate_output(auth_info);
-        }
-
-        let user = credentials[0];
-        let password = credentials[1];
-        for c in &auth_info.credentials {
-            if c.user == user && bcrypt::verify(password, &c.password_hash) {
-                return Ok(true);
+            let credentials = credentials.splitn(2, ':').collect::<Vec<_>>();
+            if credentials.len() > 1 {
+                let user = credentials[0];
+                let password = credentials[1];
+                for c in &auth_info.credentials {
+                    if c.user == user && bcrypt::verify(password, &c.password_hash) {
+                        return Ok(true);
+                    }
+                }
             }
         }
-        self.www_authenticate_output(auth_info)
+        challenge
     }
 
     fn www_authenticate_output(&self, auth_info: &AuthInfo) -> MiddlewareResult<bool> {

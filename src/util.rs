@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use chrono::{DateTime, Utc, Local};
+use chrono::{DateTime, Local, Utc};
 
 use crate::consts;
 

@@ -1,23 +1,25 @@
-use crate::server::middleware::{MiddlewareResult, MiddlewareOutput};
-use async_std::fs;
-use crate::http::response::Status;
-use futures::StreamExt;
-use crate::consts;
-use crate::server::template::templates::Templates;
-use async_std::fs::DirEntry;
-use crate::server::template::{TemplateSubstitution, SubstitutionMap};
 use std::time::{self, Duration};
-use chrono::{Utc, TimeZone};
-use async_std::path::Path;
 
-pub struct DirectoryLister<'a, 'b, 'c> {
+use async_std::fs;
+use async_std::fs::DirEntry;
+use async_std::path::Path;
+use chrono::{TimeZone, Utc};
+use futures::StreamExt;
+
+use crate::consts;
+use crate::http::response::Status;
+use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::server::template::{SubstitutionMap, TemplateSubstitution};
+use crate::server::template::templates::Templates;
+
+pub struct DirectoryLister<'a> {
     target: &'a str,
-    dir: &'b str,
-    templates: &'c Templates,
+    dir: &'a str,
+    templates: &'a Templates,
 }
 
-impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
-    pub fn new(target: &'a str, dir: &'b str, templates: &'c Templates) -> Self {
+impl<'a> DirectoryLister<'a> {
+    pub fn new(target: &'a str, dir: &'a str, templates: &'a Templates) -> Self {
         DirectoryLister { target, dir, templates }
     }
 
@@ -95,16 +97,12 @@ impl<'a, 'b, 'c> DirectoryLister<'a, 'b, 'c> {
     }
 
     fn format_readable_size(size: u64) -> String {
-        let (number, unit) = if size >= 2 << 40 {
-            (format!("{:.3}", size as f64 / (2u64 << 40) as f64), "TiB")
-        } else if size >= 2 << 30 {
-            (format!("{:.3}", size as f64 / (2u64 << 30) as f64), "GiB")
-        } else if size >= 2 << 20 {
-            (format!("{:.3}", size as f64 / (2u64 << 20) as f64), "MiB")
-        } else if size >= 2 << 10 {
-            (format!("{:.3}", size as f64 / (2u64 << 10) as f64), "KiB")
+        const SHIFT_PER_UNIT: &[(i32, &str)] = &[(40, "TiB"), (30, "GiB"), (20, "MiB"), (10, "KiB")];
+        let (number, unit) = if size < 2 << 10 {
+            (size.to_string(), "B")
         } else {
-            (format!("{}", size), "B")
+            let (shift, unit) = SHIFT_PER_UNIT.iter().find(|(shift, _)| size >= 2 << shift).unwrap();
+            (format!("{:.3}", size as f64 / (2u64 << shift) as f64), *unit)
         };
 
         let zero_trimmed = if number.contains('.') {

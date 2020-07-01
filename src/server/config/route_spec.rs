@@ -1,9 +1,9 @@
+use std::hash::{Hash, Hasher};
+
+use regex::Regex;
 use serde::{de, Deserialize, Deserializer};
 use serde::de::Visitor;
 use serde::export::{fmt, Formatter};
-
-use regex::Regex;
-use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct RouteSpec(pub Regex);
