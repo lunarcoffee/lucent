@@ -34,9 +34,10 @@ impl<'a> Visitor<'a> for AuthInfoStringVisitor {
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'a>>::Error>
         where A: SeqAccess<'a>
     {
-        let realm = seq.next_element::<String>()?.ok_or(get_error::<A>())?;
-        let credentials_str = seq.next_element::<String>()?.ok_or(get_error::<A>())?;
-        let credentials = parse_credentials(&credentials_str).ok_or(get_error::<A>())?;
+        let err = || A::Error::custom(format!("Authentication information invalid!"));
+        let realm = seq.next_element::<String>()?.ok_or(err())?;
+        let credentials_str = seq.next_element::<String>()?.ok_or(err())?;
+        let credentials = parse_credentials(&credentials_str).ok_or(err())?;
         Ok(AuthInfo { realm, credentials })
     }
 }
@@ -52,8 +53,4 @@ fn parse_credentials(credentials_str: &str) -> Option<Vec<Credentials>> {
             Some(acc)
         })?;
     Some(credentials)
-}
-
-fn get_error<'a, A: SeqAccess<'a>>() -> A::Error {
-    A::Error::custom(format!("Authentication information invalid!"))
 }

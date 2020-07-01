@@ -42,11 +42,10 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
         where E: de::Error
     {
-        let err = E::custom(format!("Route specifier invalid: {}", value));
         match value.chars().next() {
             Some('@') => Ok(RouteSpec(convert_to_regex(&value[1..], true))),
             Some('/') => Ok(RouteSpec(convert_to_regex(value, false))),
-            _ => Err(err),
+            _ => Err(E::custom(format!("Route specifier invalid: {}", value))),
         }
     }
 }
@@ -70,11 +69,10 @@ fn convert_to_regex(route: &str, must_match_entire: bool) -> Regex {
     let mut regex_str = chunked
         .iter()
         .map(|(s, is_var)| (s.splitn(2, ':').collect::<Vec<_>>(), is_var))
-        .map(|(s, is_var)| if *is_var {
-            match s.len() {
-                1 => format!("(?P<{}>.+)", &s[0][1..s[0].len() - 1]),
-                _ => format!("(?P<{}>{})", &s[0][1..], s.get(1).map(|s| &s[..s.len() - 1]).unwrap_or(&".+")),
-            }
+        .map(|(s, is_var)| if *is_var && s.len() == 1 {
+            format!("(?P<{}>.+)", &s[0][1..s[0].len() - 1])
+        } else if *is_var {
+            format!("(?P<{}>{})", &s[0][1..], s.get(1).map(|s| &s[..s.len() - 1]).unwrap_or(&".+"))
         } else {
             regex::escape(s[0])
         })

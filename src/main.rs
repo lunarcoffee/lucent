@@ -1,5 +1,3 @@
-#![feature(str_strip)]
-
 use std::env;
 
 use async_std::sync::Arc;

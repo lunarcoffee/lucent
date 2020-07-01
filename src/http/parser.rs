@@ -45,6 +45,14 @@ impl<T: error::Error> From<T> for MessageParseError {
 
 pub type MessageParseResult<T> = Result<T, MessageParseError>;
 
+macro_rules! err_if {
+    ($cond:expr, $err:ident) => {
+        if $cond {
+            return Err(MessageParseError::$err);
+        }
+    }
+}
+
 pub struct MessageParser<R: BufRead + Unpin, W: Write + Unpin> {
     reader: R,
     writer: W,
@@ -102,11 +110,9 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         buf.clear();
 
         self.read_until_space(&mut buf).await?;
-        let uri_raw = match String::from_utf8(buf[..buf.len() - 1].to_vec()) {
-            Ok(raw) => raw,
-            Err(_) => return Err(MessageParseError::InvalidUri),
-        };
-        let uri = Uri::from(&method, &uri_raw)?;
+        let uri_raw = String::from_utf8(buf[..buf.len() - 1].to_vec());
+        err_if!(uri_raw.is_err(), InvalidUri);
+        let uri = Uri::from(&method, &uri_raw.unwrap())?;
 
         let mut buf = String::new();
         with_timeout(self.reader.read_line(&mut buf)).await?;
@@ -133,19 +139,16 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         buf.clear();
 
         self.read_until_space(&mut buf).await?;
-        if buf.len() != 4 || buf[..3].iter().any(|b| !b.is_ascii_digit()) || buf[3] != b' ' {
-            return Err(MessageParseError::InvalidStatusCode);
-        }
+        err_if!(buf.len() != 4 || buf[..3].iter().any(|b| !b.is_ascii_digit()) || buf[3] != b' ', InvalidStatusCode);
+
         let status = (buf[0] - b'0') as usize * 100 + (buf[1] - b'0') as usize * 10 + (buf[2] - b'0') as usize;
-        let status = match Status::try_from(status) {
-            Ok(status) => status,
-            _ => return Err(MessageParseError::InvalidStatusCode),
-        };
+        let status = Status::try_from(status);
+        err_if!(status.is_err(), InvalidStatusCode);
 
         let mut buf = String::new();
         with_timeout(self.reader.read_line(&mut buf)).await?;
 
-        Ok((version, status))
+        Ok((version, status.unwrap()))
     }
 
     async fn parse_headers(&mut self, require_host: bool) -> MessageParseResult<Headers> {
@@ -163,11 +166,8 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
             }
         }
 
-        if headers.contains(consts::H_HOST) || !require_host {
-            Ok(headers)
-        } else {
-            Err(MessageParseError::NoHostHeader)
-        }
+        err_if!(require_host && !headers.contains(consts::H_HOST), NoHostHeader);
+        Ok(headers)
     }
 
     async fn parse_header(&mut self, headers: &mut Headers, buf: &mut String) -> MessageParseResult<()> {
@@ -184,45 +184,33 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
             vec![header_value]
         };
 
-        if headers.set(&parts[0], header_values) {
-            if header_name.as_str() == consts::H_EXPECT {
-                let response = MessageBuilder::<Response>::new();
-                if header_value == consts::H_EXPECT_CONTINUE {
-                    response.with_status(Status::Continue).build().send(&mut self.writer).await?;
-                } else {
-                    return Err(MessageParseError::InvalidExpectHeader);
-                }
-            }
-            Ok(())
-        } else {
-            Err(MessageParseError::InvalidHeader)
+        err_if!(!headers.set(&parts[0], header_values), InvalidHeader);
+        if header_name.as_str() == consts::H_EXPECT {
+            let response = MessageBuilder::<Response>::new();
+            err_if!(header_value != consts::H_EXPECT_CONTINUE, InvalidExpectHeader);
+            response.with_status(Status::Continue).build().send(&mut self.writer).await?;
         }
+        Ok(())
     }
 
     async fn parse_body(&mut self, method: Method, headers: &Headers) -> MessageParseResult<Option<Vec<u8>>> {
-        if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
-            if encodings.iter().any(|encoding| encoding != consts::H_T_ENC_CHUNKED) {
-                return Err(MessageParseError::UnsupportedTransferEncoding);
-            }
-            let (body, _) = self.parse_chunked_body().await?;
-            Ok(Some(body))
+        Ok(if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
+            err_if!(encodings.iter().any(|e| e != consts::H_T_ENC_CHUNKED), UnsupportedTransferEncoding);
+            Some(self.parse_chunked_body().await?.0)
         } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
-            let length = match length[0].parse() {
-                Ok(length) => {
-                    let exceeded_get_body_max = method == Method::Get && length > consts::MAX_GET_BODY_LENGTH;
-                    if exceeded_get_body_max || length > consts::MAX_OTHER_BODY_LENGTH {
-                        return Err(MessageParseError::BodyTooLarge);
-                    }
-                    length
-                }
-                _ => return Err(MessageParseError::InvalidBody),
-            };
+            let length = length[0].parse();
+            err_if!(length.is_err(), InvalidBody);
+            let length = length.unwrap();
+
+            let exceeded_get_body_max = method == Method::Get && length > consts::MAX_GET_BODY_LENGTH;
+            err_if!(exceeded_get_body_max || length > consts::MAX_OTHER_BODY_LENGTH, BodyTooLarge);
+
             let mut body = vec![0; length];
             with_timeout(self.reader.read_exact(body.as_mut_slice())).await?;
-            Ok(Some(body))
+            Some(body)
         } else {
-            Ok(None)
-        }
+            None
+        })
     }
 
     async fn parse_chunked_body(&mut self) -> MessageParseResult<(Vec<u8>, Headers)> {
@@ -232,21 +220,16 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
 
         while chunk_size > 0 {
             with_timeout(self.reader.read_line(&mut line)).await?;
-            if line.len() < 2 {
-                return Err(MessageParseError::InvalidBody);
-            }
+            err_if!(line.len() < 2, InvalidBody);
+
             let parts = line[..line.len() - 2].split(';').collect::<Vec<_>>();
-            if parts.len() > 2 {
-                return Err(MessageParseError::InvalidBody);
-            }
+            err_if!(parts.len() > 2, InvalidBody);
 
             chunk_size = usize::from_str_radix(parts[0], 16)?;
             let chunk_ext = parts.get(1).unwrap_or(&"").split('=').collect::<Vec<_>>();
             if chunk_ext.len() == 2 {
-                let (chunk_ext_name, chunk_ext_value) = (chunk_ext[0], chunk_ext[1]);
-                if !headers::is_token_string(chunk_ext_name) || !headers::is_token_string(chunk_ext_value) {
-                    return Err(MessageParseError::InvalidBody);
-                }
+                let (name, value) = (chunk_ext[0], chunk_ext[1]);
+                err_if!(!headers::is_token_string(name) || !headers::is_token_string(value), InvalidBody);
             }
             line.clear();
 
@@ -256,9 +239,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
                 body.extend_from_slice(&buf);
 
                 with_timeout(self.reader.read_line(&mut line)).await?;
-                if line != "\r\n" {
-                    return Err(MessageParseError::InvalidBody);
-                }
+                err_if!(line != "\r\n", InvalidBody);
                 line.clear();
             }
         }
@@ -269,7 +250,8 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
 
     async fn read_until_space(&mut self, buf: &mut Vec<u8>) -> MessageParseResult<usize> {
         let result = with_timeout(self.reader.read_until(b' ', buf)).await;
-        if buf.is_empty() { Err(MessageParseError::EndOfStream) } else { result }
+        err_if!(buf.is_empty(), EndOfStream);
+        result
     }
 }
 
