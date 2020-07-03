@@ -5,6 +5,7 @@ use async_std::sync::Arc;
 use crate::server::config::Config;
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
+use async_std::process;
 
 mod server;
 mod log;
@@ -17,7 +18,7 @@ async fn main() {
     let mut args = env::args();
     if args.len() != 2 {
         println!("usage: {} <config path>", args.next().unwrap());
-        return;
+        process::exit(1);
     }
 
     let config = match Config::load(&args.nth(1).unwrap()).await {
