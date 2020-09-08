@@ -1,11 +1,12 @@
 use std::env;
 
+use async_std::process;
 use async_std::sync::Arc;
+use futures::TryFutureExt;
 
 use crate::server::config::Config;
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
-use async_std::process;
 
 mod server;
 mod log;
@@ -21,10 +22,8 @@ async fn main() {
         process::exit(1);
     }
 
-    let config = match Config::load(&args.nth(1).unwrap()).await {
-        Some(config) => config,
-        _ => log::fatal("Configuration file invalid or missing required settings!"),
-    };
+    let config = Config::load(&args.nth(1).unwrap()).await
+        .unwrap_or_else(|| log::fatal("Configuration file invalid or missing required settings!"));
 
     log::fatal(match FileServer::new(config).await {
         Ok(server) => {
