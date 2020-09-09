@@ -2,7 +2,6 @@ use std::env;
 
 use async_std::process;
 use async_std::sync::Arc;
-use futures::TryFutureExt;
 
 use crate::server::config::Config;
 use crate::server::file_server::{FileServer, FileServerStartError};

@@ -98,11 +98,11 @@ impl<'a> DirectoryLister<'a> {
 
     fn format_readable_size(size: u64) -> String {
         const SHIFT_PER_UNIT: &[(i32, &str)] = &[(40, "TiB"), (30, "GiB"), (20, "MiB"), (10, "KiB")];
-        let (number, unit) = if size < 2 << 10 {
+        let (number, unit) = if size < 1_024 {
             (size.to_string(), "B")
         } else {
-            let (shift, unit) = SHIFT_PER_UNIT.iter().find(|(shift, _)| size >= 2 << shift).unwrap();
-            (format!("{:.3}", size as f64 / (2u64 << shift) as f64), *unit)
+            let (shift, unit) = SHIFT_PER_UNIT.iter().find(|(shift, _)| size >= 1 << shift).unwrap();
+            (format!("{:.3}", size as f64 / (1u64 << shift) as f64), *unit)
         };
 
         let zero_trimmed = if number.contains('.') {
