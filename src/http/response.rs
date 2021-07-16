@@ -83,6 +83,7 @@ impl Display for Status {
     }
 }
 
+// An HTTP response.
 pub struct Response {
     pub http_version: HttpVersion,
     pub status: Status,
@@ -92,10 +93,12 @@ pub struct Response {
 }
 
 impl Response {
+    // Attempts to parse an HTTP response. The `writer` is used if a '100 Continue' must be sent.
     pub async fn new<R: Read + Unpin, W: Write + Unpin>(reader: &mut R, writer: &mut W) -> MessageParseResult<Self> {
         MessageParser::new(BufReader::new(reader), BufWriter::new(writer)).parse_response().await
     }
 
+    // Attempts to write this response to the given `writer`.
     pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
         message::send(writer, self).await
     }

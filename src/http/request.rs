@@ -54,6 +54,7 @@ impl Display for HttpVersion {
     }
 }
 
+// An HTTP request.
 pub struct Request {
     pub method: Method,
     pub uri: Uri,
@@ -64,10 +65,12 @@ pub struct Request {
 }
 
 impl Request {
+    // Attempts to parse an HTTP request.
     pub async fn new<R: Read + Unpin, W: Write + Unpin>(reader: &mut R, writer: &mut W) -> MessageParseResult<Self> {
         MessageParser::new(BufReader::new(reader), BufWriter::new(writer)).parse_request().await
     }
 
+    // Attempts to write this request to the given `writer`.
     pub async fn _send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
         message::send(writer, self).await
     }

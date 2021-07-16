@@ -5,6 +5,7 @@ use std::fmt;
 use crate::consts;
 use crate::util;
 
+// Headers names which may contain more than one value.
 const MULTI_VALUE_HEADER_NAMES: &[&str] = &[
     consts::H_ACCEPT, consts::H_ACCEPT_CHARSET, consts::H_ACCEPT_ENCODING, consts::H_ACCEPT_LANGUAGE,
     consts::H_CACHE_CONTROL, consts::H_TE, consts::H_TRANSFER_ENCODING, consts::H_UPGRADE, consts::H_VIA,
@@ -12,12 +13,13 @@ const MULTI_VALUE_HEADER_NAMES: &[&str] = &[
 
 type HeaderMap = HashMap<String, Vec<String>>;
 
+// The headers in an HTTP message. Contains methods which simplify the manipulation of these values.
 pub struct Headers {
     headers: HeaderMap,
 }
 
 impl Headers {
-    pub fn from(headers: HashMap<String, Vec<String>>) -> Self {
+    pub fn from(headers: HeaderMap) -> Self {
         Headers { headers }
     }
 
@@ -33,6 +35,7 @@ impl Headers {
         matches!(self.get(name), Some(_))
     }
 
+    // Assigns a value to a header, checking to see if the characters in the name and value are valid.
     pub fn set_one(&mut self, name: &str, value: &str) -> bool {
         if !is_token_string(name) || !is_valid_header_value(&value) {
             false
@@ -42,6 +45,7 @@ impl Headers {
         }
     }
 
+    // Assigns multiple values to a header name.
     pub fn set(&mut self, name: &str, values: Vec<&str>) -> bool {
         if !is_token_string(name) || !values.iter().all(is_valid_header_value) {
             false
@@ -60,6 +64,7 @@ impl Headers {
         MULTI_VALUE_HEADER_NAMES.contains(&&*Self::normalize_header_name(name))
     }
 
+    // Header names are not case-sensitive, so making them lowercase is valid and helps for comparisons.
     fn normalize_header_name(name: &str) -> String {
         name.to_ascii_lowercase()
     }
@@ -77,6 +82,7 @@ impl Debug for Headers {
     }
 }
 
+// The standard defines a set of characters which a header value may contain.
 fn is_valid_header_value(str: &&str) -> bool {
     str.chars().all(|c| util::is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
 }

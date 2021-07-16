@@ -12,8 +12,12 @@ use crate::http::request::{HttpVersion, Method, Request};
 use crate::http::response::{Response, Status};
 use crate::http::uri::Uri;
 
+// The body of an HTTP request or response.
 pub enum Body {
+    // This variant is used when the full content of the body is in memory.
     Bytes(Vec<u8>),
+    // This variant is used when it would be impractical to hold the entire body in memory (i.e. a long video). When
+    // sending this over the network, the file will be read in chunks, with only one chunk in memory at a time.
     Stream(File, usize),
 }
 
@@ -26,10 +30,13 @@ impl Body {
     }
 }
 
+// An HTTP request or response.
 pub trait Message {
     fn get_headers_mut(&mut self) -> &mut Headers;
     fn get_body_mut(&mut self) -> &mut Option<Body>;
     fn into_body(self) -> Option<Body>;
+
+    // Get the message as bytes, but without the body.
     fn to_bytes_no_body(&self) -> Vec<u8>;
 
     fn is_chunked(&self) -> bool;
@@ -40,6 +47,7 @@ pub struct MessageBuilder<M: Message> {
     message: M,
 }
 
+// Some operations are defined only for requests, such as those relating to the request method and target URI.
 impl MessageBuilder<Request> {
     pub fn _new() -> Self {
         let mut headers = Headers::from(HashMap::new());
@@ -76,6 +84,7 @@ impl MessageBuilder<Request> {
     }
 }
 
+// Some operations are defined only for responses, such as those relating to the status line.
 impl MessageBuilder<Response> {
     pub fn new() -> Self {
         let mut headers = Headers::from(HashMap::new());
@@ -107,6 +116,7 @@ impl MessageBuilder<Response> {
     }
 }
 
+// Many operations are defined for both requests and responses, since they are quite similar in structure.
 impl<M: Message> MessageBuilder<M> {
     pub fn set_header(&mut self, name: &str, value: &str) {
         self.message.get_headers_mut().set_one(&name, value);
@@ -135,6 +145,7 @@ impl<M: Message> MessageBuilder<M> {
         self
     }
 
+    // This sets the required headers, and enables chunking when the length surpasses a set threshold.
     pub fn with_body(mut self, body: Body, media_type: &str) -> Self {
         self.set_header(consts::H_CONTENT_LENGTH, &task::block_on(body.len()).to_string());
         if let Body::Bytes(bytes) = &body {
@@ -155,6 +166,8 @@ impl<M: Message> MessageBuilder<M> {
     }
 }
 
+// This attempts to write an HTTP message to the given `writer`. This can fail if writing a part of the message fails,
+// or if the write is incomplete after a certain timeout.
 pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> io::Result<()> {
     io::timeout(consts::MAX_WRITE_TIMEOUT, async {
         writer.write_all(&message.to_bytes_no_body()).await?;
@@ -162,6 +175,7 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
 
         let chunked = message.is_chunked();
         if let Some(body) = message.into_body() {
+            // Send the body without blocking, chunking it if desirable.
             match body {
                 Body::Stream(file, len) => with_file(len, file, |c| task::block_on(writer.write_all(&c))).await?,
                 Body::Bytes(bytes) => {
@@ -181,6 +195,8 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
     }).await
 }
 
+// This iterates through `file` in chunks of a given size, calling `op` on each chunk. `op` may, for example, send the
+// chunk over a network.
 async fn with_file<F: FnMut(Vec<u8>) -> io::Result<()>>(len: usize, mut file: File, mut op: F) -> io::Result<()> {
     let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
     for n in 0..chunk_count {
@@ -192,6 +208,7 @@ async fn with_file<F: FnMut(Vec<u8>) -> io::Result<()>>(len: usize, mut file: Fi
     Ok(())
 }
 
+// Writes a `chunk` (a slice of bytes) to a `writer`.
 async fn write_chunk(writer: &mut (impl Write + Unpin), chunk: &[u8]) -> io::Result<()> {
     let size = format!("{:x}\r\n", chunk.len()).into_bytes();
     writer.write_all(&size).await?;
