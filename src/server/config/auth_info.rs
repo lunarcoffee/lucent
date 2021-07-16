@@ -1,6 +1,7 @@
+use std::fmt::{self, Formatter};
+
 use serde::{Deserialize, Deserializer};
 use serde::de::{Error, SeqAccess, Visitor};
-use serde::export::{fmt, Formatter};
 
 #[derive(Clone)]
 pub struct Credentials {

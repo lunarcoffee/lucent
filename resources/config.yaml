@@ -1,4 +1,4 @@
-address: "0.0.0.0:1440"
+address: "127.0.0.1:1440"
 
 file_root: "resources/www"
 template_root: "resources/templates"
@@ -14,6 +14,10 @@ routing_table:
     "@/test/calc/pdfs/{pdf_name}": "/files/calc/[pdf_name].pdf"
     "/test/calc": "/files/calc"
 
+tls:
+    cert_path: "resources/cert.pem"
+    key_path: "resources/key.pem"
+
 basic_auth:
-    "@/files/tools/spoiler_image.html": ["Tools", "L:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"]
-    "/files/restricted": ["Restricted", "LunarCoffee:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"]
+    "@/files/tools/spoiler_image.html": [ "Tools", "L:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe" ]
+    "/files/restricted": [ "Restricted", "LunarCoffee:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe" ]

@@ -124,7 +124,7 @@ impl<'a> CgiRunner<'a> {
             }
             _ => {}
         };
-        &script.stdin.as_mut()?.write(&body).ok()?;
+        script.stdin.as_mut()?.write(&body).ok()?;
         script.wait_with_output().ok()
     }
 

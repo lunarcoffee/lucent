@@ -1,3 +1,5 @@
+#![feature(box_syntax)]
+
 use std::env;
 
 use async_std::process;
@@ -35,6 +37,10 @@ async fn main() {
         Err(FileServerStartError::InvalidTemplates) => "Template directory invalid or incomplete!",
         Err(FileServerStartError::AddressInUse) => "That address is in use!",
         Err(FileServerStartError::AddressUnavailable) => "That address is unavailable!",
-        _ => "Cannot bind to that address!",
+        Err(FileServerStartError::CannotBindAddress) => "Cannot bind to that address!",
+        Err(FileServerStartError::TlsCertNotFound) => "Cannot find TLS certificate file!",
+        Err(FileServerStartError::TlsKeyNotFound) => "Cannot find RSA private key file!",
+        Err(FileServerStartError::TlsInvalidCert) => "That TLS certificate is invalid!",
+        _ => "That RSA private key is invalid!",
     });
 }

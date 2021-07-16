@@ -1,6 +1,7 @@
+use std::fmt::{self, Formatter};
+
 use serde::{de, Deserialize, Deserializer};
 use serde::de::Visitor;
-use serde::export::{fmt, Formatter};
 
 use crate::server::template::Template;
 

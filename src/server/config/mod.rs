@@ -14,6 +14,12 @@ pub mod route_replacement;
 pub mod auth_info;
 
 #[derive(Clone, Deserialize)]
+pub struct TlsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct Config {
     pub file_root: String,
     pub template_root: String,
@@ -21,6 +27,7 @@ pub struct Config {
     pub cgi_executors: HashMap<String, String>,
     pub routing_table: LinkedHashMap<RouteSpec, RouteReplacement>,
     pub basic_auth: HashMap<RouteSpec, AuthInfo>,
+    pub tls: Option<TlsConfig>,
 }
 
 impl Config {

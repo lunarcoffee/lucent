@@ -1,5 +1,8 @@
 /target
 /venv
 /.idea
-*.iml
+
 /resources/www
+/resources/*.pem
+
+*.iml
