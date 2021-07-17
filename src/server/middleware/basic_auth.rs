@@ -5,9 +5,8 @@ use crate::http::message::MessageBuilder;
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::http::response::Status;
-use crate::server::config::auth_info::AuthInfo;
+use crate::server::config::realm_info::{Credentials, RealmInfo};
 use crate::server::config::Config;
-use crate::server::config::route_spec::RouteSpec;
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 
 pub struct BasicAuthChecker<'a> {
@@ -22,19 +21,24 @@ impl<'a> BasicAuthChecker<'a> {
 
     pub fn check(&self) -> MiddlewareResult<bool> {
         let target = self.request.uri.to_string();
-        for (RouteSpec(rule_regex), auth_info) in &self.config.basic_auth {
-            if rule_regex.captures(&target).is_some() {
+        for (realm, RealmInfo { credentials, routes }) in &self.config.basic_auth {
+            if routes.iter().any(|r| r.0.captures(&target).is_some()) {
                 return match self.request.headers.get(consts::H_AUTHORIZATION) {
-                    Some(auth) => self.check_auth_header(&auth, &auth_info),
-                    _ => self.www_authenticate_output(&auth_info),
+                    Some(auth) => self.check_auth_header(&auth, realm, &credentials),
+                    _ => self.www_authenticate_output(realm),
                 };
             }
         }
         Ok(false)
     }
 
-    fn check_auth_header(&self, auth: &Vec<String>, auth_info: &AuthInfo) -> MiddlewareResult<bool> {
-        let challenge = self.www_authenticate_output(auth_info);
+    fn check_auth_header(
+        &self,
+        auth: &Vec<String>,
+        realm: &str,
+        realm_credentials: &Vec<Credentials>,
+    ) -> MiddlewareResult<bool> {
+        let challenge = self.www_authenticate_output(realm);
 
         let auth = auth[0].splitn(2, ' ').collect::<Vec<_>>();
         if auth.len() > 1 && auth[0].eq_ignore_ascii_case(consts::H_AUTH_BASIC) {
@@ -49,7 +53,7 @@ impl<'a> BasicAuthChecker<'a> {
             if credentials.len() > 1 {
                 let user = credentials[0];
                 let password = credentials[1];
-                for c in &auth_info.credentials {
+                for c in realm_credentials {
                     if c.user == user && bcrypt::verify(password, &c.password_hash) {
                         return Ok(true);
                     }
@@ -59,10 +63,10 @@ impl<'a> BasicAuthChecker<'a> {
         challenge
     }
 
-    fn www_authenticate_output(&self, auth_info: &AuthInfo) -> MiddlewareResult<bool> {
+    fn www_authenticate_output(&self, realm: &str) -> MiddlewareResult<bool> {
         log::info(format!("({}) {} {}", Status::Unauthorized, self.request.method, self.request.uri));
 
-        let auth = format!("{} {}=\"{}\"", consts::H_AUTH_BASIC, consts::H_AUTH_REALM, auth_info.realm);
+        let auth = format!("{} {}=\"{}\"", consts::H_AUTH_BASIC, consts::H_AUTH_REALM, realm);
         let response = MessageBuilder::<Response>::new()
             .with_status(Status::Unauthorized)
             .with_header(consts::H_WWW_AUTHENTICATE, &auth)

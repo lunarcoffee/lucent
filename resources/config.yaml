@@ -3,21 +3,26 @@ address: "127.0.0.1:1440"
 file_root: "resources/www"
 template_root: "resources/templates"
 
-cgi_executors:
-    py: "python3"
-    pl: "perl"
-
 routing_table:
-    "@/": "/index.html"
-    "@/cgi": "/files/test_cgi.py"
-    "@/{image_name:[a-zA-Z]+}/img": "/files/images/[image_name].jpg"
-    "@/test/calc/pdfs/{pdf_name}": "/files/calc/[pdf_name].pdf"
-    "/test/calc": "/files/calc"
+  "@/": "/index.html"
+  "@/cgi": "/files/hello_cgi.py"
+  "@/{image_name:[a-zA-Z]+}/img": "/files/images/[image_name].jpg"
+  "@/pdfs/{pdf_name}": "/files/pdfs/[pdf_name].pdf"
+  "/pdfs": "/files/pdfs"
 
-tls:
-    cert_path: "resources/cert.pem"
-    key_path: "resources/key.pem"
+cgi_executors:
+  py: "python3"
+  pl: "perl"
 
 basic_auth:
-    "@/files/tools/spoiler_image.html": [ "Tools", "L:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe" ]
-    "/files/restricted": [ "Restricted", "LunarCoffee:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe" ]
+  secret:
+    credentials:
+      - "user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"
+      - "user2:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"
+    routes:
+      - "@/files/secrets.html"
+      - "/files/restricted"
+
+tls:
+  cert_path: "resources/cert.pem"
+  key_path: "resources/key.pem"

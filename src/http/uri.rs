@@ -11,6 +11,7 @@ use crate::util;
 pub struct Authority {
     // This includes the username and/or password.
     pub user_info: Option<String>,
+
     pub host: String,
     pub port: Option<u16>,
 }
@@ -60,13 +61,16 @@ impl Display for AbsolutePath {
 pub enum Uri {
     // Origin-form specifies only a path (i.e. 'GET /index.html'), with the host specified in the 'Host' header.
     OriginForm { path: AbsolutePath },
+
     // Absolute-form specifies both host and path.
     AbsoluteForm {
         authority: Authority,
         path: AbsolutePath,
     },
+
     // Authority-form specifies only the authority, used only for CONNECT requests.
     AuthorityForm { authority: Authority },
+
     // Asterisk-form ('*') is used only for a server-wide OPTIONS request.
     AsteriskForm,
 }

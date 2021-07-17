@@ -36,16 +36,16 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
     type Value = RouteSpec;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-        formatter.write_str("String value beginning with `@/` or `/`.")
+        formatter.write_str("String value beginning with '@/' or '/'.")
     }
 
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, str: &str) -> Result<Self::Value, E>
         where E: de::Error
     {
-        match value.chars().next() {
-            Some('@') => Ok(RouteSpec(convert_to_regex(&value[1..], true))),
-            Some('/') => Ok(RouteSpec(convert_to_regex(value, false))),
-            _ => Err(E::custom(format!("Route specifier invalid: {}", value))),
+        match str.chars().next() {
+            Some('@') => Ok(RouteSpec(convert_to_regex(&str[1..], true))),
+            Some('/') => Ok(RouteSpec(convert_to_regex(str, false))),
+            _ => Err(E::custom(format!("Route specifier invalid: {}", str))),
         }
     }
 }

@@ -16,6 +16,7 @@ use crate::http::uri::Uri;
 pub enum Body {
     // This variant is used when the full content of the body is in memory.
     Bytes(Vec<u8>),
+
     // This variant is used when it would be impractical to hold the entire body in memory (i.e. a long video). When
     // sending this over the network, the file will be read in chunks, with only one chunk in memory at a time.
     Stream(File, usize),

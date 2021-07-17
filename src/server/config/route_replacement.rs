@@ -5,6 +5,7 @@ use serde::de::Visitor;
 
 use crate::server::template::Template;
 
+// A rule for rewriting a URL, as specified by a `Template`; the rule syntax is identical to that of the templates.
 #[derive(Clone)]
 pub struct RouteReplacement(pub Template);
 
@@ -22,16 +23,17 @@ impl<'a> Visitor<'a> for RouteReplacementStringVisitor {
     type Value = RouteReplacement;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-        formatter.write_str("String value beginning with `/`.")
+        formatter.write_str("string value starting with '/'")
     }
 
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, str: &str) -> Result<Self::Value, E>
         where E: de::Error
     {
-        let err = E::custom(format!("Route replacement invalid: {}", value));
-        match value.chars().next() {
-            Some('/') => Ok(RouteReplacement(Template::new(value.to_string()).ok_or(err)?)),
-            _ => Err(err),
-        }
+        // Make sure the rule starts with a slash (i.e. specifies a route). `Template::new` does syntax checking.
+        str.starts_with('/')
+            .then(|| str)
+            .and_then(|s| Template::new(s.to_string()))
+            .map(|t| RouteReplacement(t))
+            .ok_or(E::custom("expected route replacement"))
     }
 }
