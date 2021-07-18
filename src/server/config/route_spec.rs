@@ -56,48 +56,63 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
     }
 }
 
-// this sucks lol TODO
-fn convert_to_regex(route: &str, must_match_entire: bool) -> Regex {
-    let chunked = isolate_var_captures(route);
+// Converts the raw route specifier (`route`) into the corresponding regex. If `must_match_entire` is true, the regex
+// will only match the route given verbatim. Otherwise, it will match any route with a matching prefix.
+fn convert_to_regex(route: &str, match_exact: bool) -> Regex {
+    let isolated = isolate_var_captures(route);
 
-    let (chunks, remainder_chunk) = chunked.as_chunks::<2>();
+    // Since the string and variable captures are alternating, we process them in chunks of two. The first will always
+    // be a string, and the second will always be a variable capture.
+    let (chunks, remainder_chunk) = isolated.as_chunks::<2>();
     let mut regex_str = "/".to_string();
 
+    // Build up `regex_str` by processing each adjacent pair of chunks.
     for [str, var] in chunks {
+        // Slicing off the first character removes the leftover '}'; see the comment above `isolate_var_captures`.
         regex_str.push_str(&regex::escape(&str[1..]));
 
+        // Append the variable capture and the regex, if present.
         let mut split_var = var.splitn(2, ':');
         regex_str.push_str(&format!("(?P<{}>", &split_var.next().unwrap()[1..]));
         regex_str.push_str(&format!("{})", split_var.next().unwrap_or(".+")));
     }
-    regex_str.push_str(&regex::escape(&remainder_chunk[0][1..]));
 
-    regex_str = if must_match_entire { format!("^{}$", regex_str) } else { format!("^{}", regex_str) };
+    // Append the remaining string chunk, if present; note the same slicing mentioned earlier.
+    if !remainder_chunk.is_empty() {
+        regex_str.push_str(&regex::escape(&remainder_chunk[0][1..]));
+    }
+
+    // Account for whether the regex must match a route exactly.
+    regex_str = if match_exact { format!("^{}$", regex_str) } else { format!("^{}", regex_str) };
     Regex::new(&regex_str).unwrap()
 }
 
+// Turns a raw route specifier into a list alternating between strings and variable captures. For example, '/a/{var}/b'
+// would become ['/a/', '{var', '}/b']; note that the '}' is not considered part of the variable capture in this
+// context, but it is still required to be present.
 fn isolate_var_captures(route: &str) -> Vec<String> {
+    // `is_var` represents whether the current character belongs to a capture, and `prev_is_escape` represents whether
+    // the previous character is the escape character ('\').
     let mut is_var = false;
     let mut prev_is_escape = false;
 
-    let partitioned = route.chars().filter_map(|c| {
+    // Map each character of the string to a boolean representing whether it is in a capture or not.
+    let mapped = route.chars().filter_map(|c| {
+        // If the previous character was '\', don't change anything; the current character is special. Otherwise,
+        // this maintains the invariant of `is_var` as specified in the comment earlier, with the exception that the
+        // terminating '}' is not considered part of a capture.
         if !prev_is_escape {
             is_var = if c == '{' { true } else if c == '}' && is_var { false } else { is_var };
         }
         prev_is_escape = c == '\\';
+
+        // Don't include escape characters in the final output.
         if prev_is_escape { None } else { Some((c, is_var)) }
     });
 
-    let mut chunked = vec![];
-    let mut prev_is_var = true;
-
-    for (char, is_var) in partitioned {
-        if is_var != prev_is_var {
-            chunked.push(char.to_string());
-            prev_is_var = is_var;
-        } else {
-            chunked.last_mut().unwrap().push(char);
-        }
-    }
-    chunked
+    // Combine adjacent characters into strings, based on whether they are in a capture or not.
+    mapped.collect::<Vec<_>>()
+        .group_by(|a, b| a.1 == b.1)
+        .map(|g| g.into_iter().map(|(c, _)| *c).collect())
+        .collect()
 }

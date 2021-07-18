@@ -1,5 +1,6 @@
 #![feature(box_syntax)]
 #![feature(slice_as_chunks)]
+#![feature(slice_group_by)]
 
 use std::env;
 
