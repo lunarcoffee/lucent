@@ -33,7 +33,7 @@ pub struct ResponseGenerator<'a> {
     conn_info: &'a ConnInfo,
     raw_target: String,
     routed_target: String,
-    target: String,
+    target_file: String,
 
     response: MessageBuilder<Response>,
     body: Body,
@@ -42,7 +42,7 @@ pub struct ResponseGenerator<'a> {
 
 impl<'a> ResponseGenerator<'a> {
     pub fn new(config: &'a Config, templates: &'a Templates, request: &'a mut Request, conn: &'a ConnInfo) -> Self {
-        let (raw_target, routed_target, target) = rewrite_url(request, config);
+        let (raw_target, routed_target, target_file) = rewrite_url(request, config);
 
         ResponseGenerator {
             config,
@@ -52,7 +52,7 @@ impl<'a> ResponseGenerator<'a> {
             conn_info: conn,
             raw_target,
             routed_target,
-            target,
+            target_file,
 
             response: MessageBuilder::<Response>::new(),
             body: Body::Bytes(vec![]),
@@ -63,14 +63,14 @@ impl<'a> ResponseGenerator<'a> {
     pub async fn get_response(mut self) -> MiddlewareResult<()> {
         let required_auth = BasicAuthChecker::new(self.request, self.config).check()?;
 
-        let file = match File::open(&self.target).await {
+        let file = match File::open(&self.target_file).await {
             Ok(file) => file,
             _ => return Err(MiddlewareOutput::Error(Status::NotFound, false)),
         };
 
         let metadata = file.metadata().await?;
         let last_modified = Some(metadata.modified()?.into());
-        let etag = Some(Self::generate_etag(&last_modified.unwrap()));
+        let etag = Some(generate_etag(&last_modified.unwrap()));
         let info = CondInfo::new(etag, last_modified);
         self.set_body(&info, &metadata).await?;
 
@@ -81,8 +81,11 @@ impl<'a> ResponseGenerator<'a> {
             .with_body(self.body, &self.media_type)
             .build();
 
-        let routed = self.routed_target;
-        let reroute = if self.raw_target != routed { format!(" -> {}", routed) } else { String::new() };
+        let reroute = if self.raw_target != self.routed_target {
+            format!(" -> {}", self.routed_target)
+        } else {
+            String::new()
+        };
         let auth = if required_auth { " (basic auth)" } else { "" };
         log::info(format!("({}) {} {}{}{}", response.status, &self.request.method, &self.raw_target, reroute, auth));
 
@@ -99,7 +102,7 @@ impl<'a> ResponseGenerator<'a> {
 
         if metadata.is_dir() {
             self.media_type = consts::H_MEDIA_HTML.to_string();
-            self.body = Body::Bytes(DirectoryLister::new(&self.routed_target, &self.target, self.templates)
+            self.body = Body::Bytes(DirectoryLister::new(&self.routed_target, &self.target_file, self.templates)
                 .get_listing_body()
                 .await?
                 .into_bytes());
@@ -110,14 +113,14 @@ impl<'a> ResponseGenerator<'a> {
     }
 
     async fn set_file_body(&mut self, cgi: bool, info: &CondInfo, metadata: &Metadata) -> MiddlewareResult<()> {
-        let target = &self.target;
+        let target = &self.target_file;
         let path = Path::new(target);
         let file_ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
         let target_no_ext = &target[..target.len() - file_ext.len() - 1];
 
         if target_no_ext.ends_with("_cgi") {
             let is_nph = target_no_ext.ends_with("_nph_cgi");
-            CgiRunner::new(&self.target, &mut self.request, &self.conn_info, &self.config, is_nph)
+            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph)
                 .get_response()
                 .await?;
         }
@@ -131,7 +134,7 @@ impl<'a> ResponseGenerator<'a> {
 
             self.media_type = util::media_type_by_ext(file_ext).to_string();
             if self.request.method != Method::Head {
-                let file = File::open(&self.target).await?;
+                let file = File::open(&target).await?;
                 let len = file.metadata().await?.len();
                 self.body = Body::Stream(file, len as usize);
                 if can_send_range {
@@ -165,27 +168,20 @@ impl<'a> ResponseGenerator<'a> {
         }
         Ok(())
     }
-
-    fn generate_etag(modified: &DateTime<Utc>) -> String {
-        let mut hasher = DefaultHasher::new();
-        let time = util::format_time_imf(modified);
-        time.hash(&mut hasher);
-
-        let etag = format!("\"{:x}", hasher.finish());
-        time.chars().into_iter().rev().collect::<String>().hash(&mut hasher);
-
-        etag + &format!("{:x}\"", hasher.finish())
-    }
 }
 
 fn rewrite_url(request: &mut Request, config: &Config) -> (String, String, String) {
     let raw_target = request.uri.to_string();
     let routed_target = route_raw_target(config, &raw_target).unwrap_or(raw_target.to_string());
-    let target = format!("{}{}", &config.file_root, &routed_target);
-    if let Ok(uri) = Uri::from(&request.method, &routed_target) {
-        request.uri = uri;
-    }
-    (raw_target, routed_target, target)
+
+    let target_file = match Uri::from(&request.method, &routed_target) {
+        Ok(uri) => {
+            request.uri = uri;
+            format!("{}/{}", &config.file_root, request.uri.to_string_no_query())
+        }
+        _ => format!("{}{}", &config.file_root, &routed_target)
+    };
+    (raw_target, routed_target, target_file)
 }
 
 fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
@@ -202,4 +198,15 @@ fn route_raw_target(config: &Config, raw_target: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn generate_etag(modified: &DateTime<Utc>) -> String {
+    let mut hasher = DefaultHasher::new();
+    let time = util::format_time_imf(modified);
+    time.hash(&mut hasher);
+
+    let etag = format!("\"{:x}", hasher.finish());
+    time.chars().into_iter().rev().collect::<String>().hash(&mut hasher);
+
+    etag + &format!("{:x}\"", hasher.finish())
 }

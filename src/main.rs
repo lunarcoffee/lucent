@@ -1,4 +1,5 @@
 #![feature(box_syntax)]
+#![feature(slice_as_chunks)]
 
 use std::env;
 

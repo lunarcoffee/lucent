@@ -21,7 +21,7 @@ pub struct Config {
     // The directory containing the files to serve.
     pub file_root: String,
 
-    // The directory containing templates used by the server (i.e. for directory listings or error pages).
+    // The directory containing templates used to generate server pages (i.e. directory listings or error pages).
     pub template_root: String,
 
     // The address on which to host the server.

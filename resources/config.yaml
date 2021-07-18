@@ -1,28 +1,31 @@
-address: "127.0.0.1:1440"
+address: '127.0.0.1:1440'
 
-file_root: "resources/www"
-template_root: "resources/templates"
+file_root: 'resources/www'
+template_root: 'resources/templates'
 
 routing_table:
-  "@/": "/index.html"
-  "@/cgi": "/files/hello_cgi.py"
-  "@/{image_name:[a-zA-Z]+}/img": "/files/images/[image_name].jpg"
-  "@/pdfs/{pdf_name}": "/files/pdfs/[pdf_name].pdf"
-  "/pdfs": "/files/pdfs"
+  '@/': '/index.html'
+  '@/cgi': '/files/hello_cgi.py'
+
+  '@/{image_name:[a-zA-Z]+}/img': '/files/images/[image_name].jpg'
+  '@/prime/{number:[0-9]\{3\}}': '/files/prime_cgi.py?n=[number]'
+
+  '/pdfs/{pdf_name}': '/files/pdfs/[pdf_name].pdf'
+  '/pdfs': '/files/pdfs'
 
 cgi_executors:
-  py: "python3"
-  pl: "perl"
+  py: 'python3'
+  pl: 'perl'
 
 basic_auth:
   secret:
     credentials:
-      - "user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"
-      - "user2:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe"
+      - 'user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
+      - 'user2:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
     routes:
-      - "@/files/secrets.html"
-      - "/files/restricted"
+      - '@/files/secrets.html'
+      - '/files/restricted'
 
 tls:
-  cert_path: "resources/cert.pem"
-  key_path: "resources/key.pem"
+  cert_path: 'resources/cert.pem'
+  key_path: 'resources/key.pem'

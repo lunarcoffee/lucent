@@ -64,6 +64,7 @@ pub enum Uri {
 
     // Absolute-form specifies both host and path.
     AbsoluteForm {
+        scheme: String,
         authority: Authority,
         path: AbsolutePath,
     },
@@ -81,6 +82,15 @@ impl Uri {
     pub fn from(method: &Method, raw: &str) -> MessageParseResult<Self> {
         UriParser { method, raw }.parse()
     }
+
+    pub fn to_string_no_query(&self) -> String {
+        match self {
+            Uri::OriginForm { path } => format!("{}", path.path_as_string()),
+            Uri::AbsoluteForm { scheme, authority, path } =>
+                format!("{}://{}{}", scheme, authority, path.path_as_string()),
+            _ => format!("{}", self),
+        }
+    }
 }
 
 // Formats the URI in accordance to the forms specified in RFC 7230.
@@ -88,9 +98,9 @@ impl Display for Uri {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Uri::OriginForm { path } => write!(f, "{}", path),
-            Uri::AbsoluteForm { authority, path } => write!(f, "http://{}{}", authority, path),
+            Uri::AbsoluteForm { scheme, authority, path } => write!(f, "{}://{}{}", scheme, authority, path),
             Uri::AuthorityForm { authority } => write!(f, "{}", authority),
-            Uri::AsteriskForm => write!(f, "*"),
+            _ => write!(f, "*"),
         }
     }
 }
@@ -128,26 +138,27 @@ impl UriParser<'_, '_> {
             Ok(Uri::OriginForm { path })
         } else {
             // Otherwise, assume authority-form.
-            self.parse_pre_authority()?;
+            let scheme = self.parse_pre_authority()?;
             let authority = self.parse_authority(true)?;
             let path = self.parse_absolute_path(true)?;
-            Ok(Uri::AbsoluteForm { authority, path })
+            Ok(Uri::AbsoluteForm { scheme, authority, path })
         }
     }
 
     // Attempts to parse the URI scheme (only HTTP and HTTPS are supported).
-    fn parse_pre_authority(&mut self) -> MessageParseResult<()> {
-        if self.raw.starts_with("http://") && self.raw.len() > 7 {
-            // Just trim off the URI scheme, we won't need it later on. This also prevents the next stage in parsing
-            // from parsing the scheme again.
+    fn parse_pre_authority(&mut self) -> MessageParseResult<String> {
+        let scheme = if self.raw.starts_with("http://") && self.raw.len() > 7 {
+            // Prevent the next stage in parsing from parsing the scheme again.
             self.raw = &self.raw[7..];
+            "http"
         } else if self.raw.starts_with("https://") && self.raw.len() > 8 {
             self.raw = &self.raw[8..];
+            "https"
         } else {
             // Only HTTP and HTTPS schemes are supported.
             return Err(MessageParseError::InvalidUri);
-        }
-        Ok(())
+        };
+        Ok(scheme.to_string())
     }
 
     fn parse_authority(&mut self, accept_user: bool) -> MessageParseResult<Authority> {

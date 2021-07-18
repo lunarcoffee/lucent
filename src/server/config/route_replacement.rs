@@ -5,7 +5,8 @@ use serde::de::Visitor;
 
 use crate::server::template::Template;
 
-// A rule for rewriting a URL, as specified by a `Template`; the rule syntax is identical to that of the templates.
+// A rule for URL rewriting, as specified by a `Template`; the rule syntax is identical to that of the templates. As
+// with the templates, variables are allowed (they must be captured by the corresponding `RouteSpec`).
 #[derive(Clone)]
 pub struct RouteReplacement(pub Template);
 
