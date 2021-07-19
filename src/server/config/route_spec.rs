@@ -57,7 +57,7 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
 }
 
 // Converts the raw route specifier (`route`) into the corresponding regex. If `must_match_entire` is true, the regex
-// will only match the route given verbatim. Otherwise, it will match any route with a matching prefix.
+// will only match the route given exactly. Otherwise, it will match any route with a matching prefix.
 fn convert_to_regex(route: &str, match_exact: bool) -> Regex {
     let isolated = isolate_var_captures(route);
 
@@ -71,7 +71,8 @@ fn convert_to_regex(route: &str, match_exact: bool) -> Regex {
         // Slicing off the first character removes the leftover '}'; see the comment above `isolate_var_captures`.
         regex_str.push_str(&regex::escape(&str[1..]));
 
-        // Append the variable capture and the regex, if present.
+        // Append the variable capture and the regex, if present. If no regex is present, accept any non-empty string
+        // of characters ('.+'). Also note the slicing for the capture, which removes the leading '{'.
         let mut split_var = var.splitn(2, ':');
         regex_str.push_str(&format!("(?P<{}>", &split_var.next().unwrap()[1..]));
         regex_str.push_str(&format!("{})", split_var.next().unwrap_or(".+")));
@@ -113,6 +114,6 @@ fn isolate_var_captures(route: &str) -> Vec<String> {
     // Combine adjacent characters into strings, based on whether they are in a capture or not.
     mapped.collect::<Vec<_>>()
         .group_by(|a, b| a.1 == b.1)
-        .map(|g| g.into_iter().map(|(c, _)| *c).collect())
+        .map(|g| g.into_iter().map(|(c, _)| c).collect())
         .collect()
 }
