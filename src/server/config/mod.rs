@@ -39,7 +39,8 @@ pub struct Config {
     // which are in the realm.
     pub basic_auth: HashMap<String, RealmInfo>,
 
-    // TLS information; see below.
+    // TLS information; see below. If this field is provided, TLS will be enabled automatically (regular non-encrypted
+    // HTTP traffic will be discarded).
     pub tls: Option<TlsConfig>,
 }
 
