@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_std::fs::File;
 use async_std::io;
-use async_std::io::prelude::{ReadExt, WriteExt};
+use async_std::io::prelude::WriteExt;
 use async_std::io::Write;
 use async_std::task;
 
@@ -178,7 +178,8 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
         if let Some(body) = message.into_body() {
             // Send the body without blocking, chunking it if desirable.
             match body {
-                Body::Stream(file, len) => with_file(len, file, |c| task::block_on(writer.write_all(&c))).await?,
+                Body::Stream(mut file, len) =>
+                    util::with_file_chunks(len, &mut file, |c| task::block_on(writer.write_all(&c))).await?,
                 Body::Bytes(bytes) => {
                     if chunked {
                         for chunk in bytes.chunks(consts::CHUNK_SIZE) {
@@ -196,18 +197,6 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
     }).await
 }
 
-// This iterates through `file` in chunks of a given size, calling `op` on each chunk. `op` may, for example, send the
-// chunk over a network.
-async fn with_file<F: FnMut(Vec<u8>) -> io::Result<()>>(len: usize, mut file: File, mut op: F) -> io::Result<()> {
-    let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
-    for n in 0..chunk_count {
-        let chunk_len = if n == chunk_count - 1 { len % consts::READ_CHUNK_SIZE } else { consts::READ_CHUNK_SIZE };
-        let mut chunk = vec![0; chunk_len];
-        file.read_exact(&mut chunk).await?;
-        op(chunk)?;
-    }
-    Ok(())
-}
 
 // Writes a `chunk` (a slice of bytes) to a `writer`.
 async fn write_chunk(writer: &mut (impl Write + Unpin), chunk: &[u8]) -> io::Result<()> {

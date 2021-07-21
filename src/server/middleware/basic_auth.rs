@@ -5,10 +5,11 @@ use crate::http::message::MessageBuilder;
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::http::response::Status;
-use crate::server::config::realm_info::{Credentials, RealmInfo};
 use crate::server::config::Config;
+use crate::server::config::realm_info::{Credentials, RealmInfo};
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 
+// Authenticates the `request` using HTTP basic authentication, checking against credentials in the `config`.
 pub struct BasicAuthChecker<'a> {
     request: &'a Request,
     config: &'a Config,
@@ -19,50 +20,60 @@ impl<'a> BasicAuthChecker<'a> {
         BasicAuthChecker { request, config }
     }
 
+    // Checks if authentication is required, sending a 401 with a challenge if necessary.
     pub fn check(&self) -> MiddlewareResult<bool> {
         let target = self.request.uri.to_string();
+
+        // Check if the request's target matches a route in an authentication realm.
         for (realm, RealmInfo { credentials, routes }) in &self.config.basic_auth {
             if routes.iter().any(|r| r.0.captures(&target).is_some()) {
+                // If it does, check if information is already provided (in the 'Authorization' header). Use that if
+                // available, and send a challenge otherwise.
                 return match self.request.headers.get(consts::H_AUTHORIZATION) {
                     Some(auth) => self.check_auth_header(&auth, realm, &credentials),
                     _ => self.www_authenticate_output(realm),
                 };
             }
         }
+
+        // The requested resource does not require authentication.
         Ok(false)
     }
 
+    // Checks the request's `Authorization` header.
     fn check_auth_header(
         &self,
         auth: &Vec<String>,
         realm: &str,
         realm_credentials: &Vec<Credentials>,
     ) -> MiddlewareResult<bool> {
-        let challenge = self.www_authenticate_output(realm);
 
+        // Attempt to parse the 'Authorization' header, ensuring the client is using basic authentication.
         let auth = auth[0].splitn(2, ' ').collect::<Vec<_>>();
         if auth.len() > 1 && auth[0].eq_ignore_ascii_case(consts::H_AUTH_BASIC) {
-            let encoded_credentials = &auth[1];
-            let maybe_credentials = base64::decode(encoded_credentials).map(|c| String::from_utf8(c));
-            let credentials = match maybe_credentials {
-                Ok(Ok(c)) => c,
-                _ => return challenge,
-            };
+            // Try decoding the base64-encoded credentials.
+            if let Ok(Ok(user_credentials)) = base64::decode(&auth[1]).map(|c| String::from_utf8(c)) {
+                // Try parsing the colon-delimited username and password.
+                let credentials = user_credentials.splitn(2, ':').collect::<Vec<_>>();
+                if credentials.len() > 1 {
+                    let user = credentials[0];
+                    let password = credentials[1];
 
-            let credentials = credentials.splitn(2, ':').collect::<Vec<_>>();
-            if credentials.len() > 1 {
-                let user = credentials[0];
-                let password = credentials[1];
-                for c in realm_credentials {
-                    if c.user == user && bcrypt::verify(password, &c.password_hash) {
-                        return Ok(true);
+                    // If the request's credentials match a set of valid credentials, authentication is successful.
+                    for c in realm_credentials {
+                        if c.user == user && bcrypt::verify(password, &c.password_hash) {
+                            return Ok(true);
+                        }
                     }
                 }
             }
         }
-        challenge
+
+        // Authentication failed, send challenge.
+        self.www_authenticate_output(realm)
     }
 
+    // Generates an authentication challenge.
     fn www_authenticate_output(&self, realm: &str) -> MiddlewareResult<bool> {
         log::info(format!("({}) {} {}", Status::Unauthorized, self.request.method, self.request.uri));
 

@@ -3,7 +3,7 @@ use std::time::Duration;
 pub const OPTIONAL_WHITESPACE: &[char] = &[' ', '\t'];
 pub const CRLF: &str = "\r\n";
 
-pub const SERVER_NAME_VERSION: &str = "Lucent/1.2.0";
+pub const SERVER_NAME_VERSION: &str = "Lucent/1.2.1";
 
 pub const MAX_URI_LENGTH: usize = 8_192;
 pub const MAX_HEADER_LENGTH: usize = 8_192;
