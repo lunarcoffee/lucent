@@ -126,20 +126,18 @@ impl<'a> ResponseGenerator<'a> {
         }
 
         if !cgi {
-            let can_send_range = match ConditionalChecker::new(info, &self.request.headers).check() {
-                Err(MiddlewareOutput::Status(Status::Ok, ..)) => false,
-                Err(output) if !metadata.is_dir() => return Err(output),
-                _ => true,
-            };
+            if let Err(output) = ConditionalChecker::new(info, &mut self.request.headers).check() {
+                if !metadata.is_dir() {
+                    return Err(output);
+                }
+            }
 
             self.media_type = util::media_type_by_ext(file_ext).to_string();
             if self.request.method != Method::Head {
                 let file = File::open(&target).await?;
                 let len = file.metadata().await?.len();
                 self.body = Body::Stream(file, len as usize);
-                if can_send_range {
-                    self.set_range_body().await?;
-                }
+                self.set_range_body().await?;
             }
         }
         Ok(())

@@ -14,7 +14,7 @@ pub mod response_gen;
 // Handles range requests (see RFC 7233).
 pub mod range_parser;
 
-// Checks conditional headers (modify time/ETag).
+// Checks conditional headers (modify time/ETag; see RFC 7232).
 pub mod cond_checker;
 
 // Generates a response with a directory listing.

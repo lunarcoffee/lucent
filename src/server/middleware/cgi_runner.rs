@@ -9,7 +9,7 @@ use crate::{consts, log, util};
 use crate::http::message::{Body, Message};
 use crate::http::request::{HttpVersion, Request};
 use crate::http::response::{Response, Status};
-use crate::http::uri::Uri;
+use crate::http::uri::{Query, Uri};
 use crate::server::config::Config;
 use crate::server::file_server::ConnInfo;
 use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
@@ -122,6 +122,11 @@ impl<'a> CgiRunner<'a> {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        // If the query is a search-string, each word should be passed as a command line argument.
+        if let Query::SearchString(terms) = self.request.uri.query() {
+            script.args(terms);
+        }
 
         // Set environment variables for the request's headers.
         for (header_name, header_values) in self.request.headers.get_all() {

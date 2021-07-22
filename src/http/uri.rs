@@ -25,10 +25,19 @@ impl Display for Authority {
     }
 }
 
+// A parsed query string.
+pub enum Query {
+    ParamMap(HashMap<String, String>),
+
+    // Used with GET or HEAD requests handled by CGI scripts (see section 4.4 in RFC 3875).
+    SearchString(Vec<String>),
+    None,
+}
+
 // An absolute path with optional query parameters.
 pub struct AbsolutePath {
     pub path: Vec<String>,
-    pub query: Option<HashMap<String, String>>,
+    pub query: Query,
 }
 
 impl AbsolutePath {
@@ -39,11 +48,12 @@ impl AbsolutePath {
     // Returns the formatted query string.
     pub fn query_as_string(&self) -> String {
         match &self.query {
-            Some(query) => query
+            Query::ParamMap(map) => map
                 .iter()
                 .map(|(name, value)| format!("{}={}", name, value))
                 .collect::<Vec<_>>()
                 .join("&"),
+            Query::SearchString(terms) => terms.join("+"),
             _ => String::new(),
         }
     }
@@ -81,6 +91,14 @@ impl Uri {
     // CONNECT requests) with the given `method`.
     pub fn from(method: &Method, raw: &str) -> MessageParseResult<Self> {
         UriParser { method, raw }.parse()
+    }
+
+    pub fn query(&self) -> &Query {
+        match self {
+            Uri::OriginForm { path, .. } => &path.query,
+            Uri::AbsoluteForm { path, .. } => &path.query,
+            _ => &Query::None,
+        }
     }
 
     pub fn to_string_no_query(&self) -> String {
@@ -232,36 +250,45 @@ impl UriParser<'_, '_> {
         path.remove(0);
         err_if!(path.iter().any(|part| part.is_empty() || !part.chars().all(is_path_char) || part == ".."));
 
-        // Percent-decode each segment. Using `filter_map` here means if one or more segments cannot be decoded, they
-        // won't be included in the final result. One way of checking for that is to see if the length decreased.
-        let old_len = path.len();
-        path = path.iter().filter_map(|s| decode_percent(s)).collect::<Vec<_>>();
-        err_if!(path.len() < old_len);
+        // Percent-decode each segment.
+        for segment in path.iter_mut() {
+            *segment = decode_percent(&segment).ok_or(MessageParseError::InvalidUri)?;
+        }
 
-        // Parse the query parameters, if present.
-        if raw_query.is_empty() {
-            Ok(AbsolutePath { path, query: None })
-        } else {
-            // Split each query parameter pair, then split each pair into key and value.
-            let params = raw_query
-                .split('&')
-                .map(|param| param.splitn(2, '=').collect::<Vec<&str>>())
-                .collect::<Vec<_>>();
+        // Parse the query.
+        Ok(AbsolutePath { path, query: parse_query(raw_query)? })
+    }
+}
 
-            // Terminate if not all parameter pairs are of length two (i.e. if there was no '=' to split on), or if
-            // there are invalid characters anywhere.
-            err_if!(!params.iter()
+// Parse the query parameters, if present (non-empty).
+fn parse_query(raw_query: &str) -> MessageParseResult<Query> {
+    Ok(if raw_query.is_empty() {
+        Query::None
+    } else if raw_query.contains('=') {
+        // Split each query parameter pair, then split each pair into key and value.
+        let params = raw_query.split('&')
+            .map(|param| param.splitn(2, '=').collect::<Vec<&str>>())
+            .collect::<Vec<_>>();
+
+        // Terminate if not all parameter pairs are of length two (i.e. if there was no '=' to split on), or if
+        // there are invalid characters anywhere.
+        err_if!(!params.iter()
                 .all(|p| p.len() == 2 && p[0].chars().all(is_query_char) && p[1].chars().all(is_query_char)));
 
-            // Percent-decode the parameters, and apply the same success check with `filter_map` as described above.
-            let query = params
-                .iter()
-                .filter_map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
-                .collect::<HashMap<_, _>>();
-            err_if!(query.len() < params.len());
-            Ok(AbsolutePath { path, query: Some(query) })
-        }
-    }
+        // Percent-decode the parameters.
+        let query = params.iter()
+            .map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
+            .collect::<Option<HashMap<_, _>>>()
+            .ok_or(MessageParseError::InvalidUri)?;
+        Query::ParamMap(query)
+    } else {
+        // Split into pieces and decode.
+        let params = raw_query.split('+')
+            .map(|term| decode_percent(term))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(MessageParseError::InvalidUri)?;
+        Query::SearchString(params)
+    })
 }
 
 // The URI spec defines many sets of characters, using them to specify which characters are allowed in what parts of a
