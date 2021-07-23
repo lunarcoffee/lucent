@@ -11,7 +11,7 @@ mod template_parser;
 pub type PlaceholderName = String;
 
 // See the comment on `Template`.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum TemplatePart {
     // Regular text, no special processing.
     String(String),
@@ -31,6 +31,7 @@ pub enum TemplatePart {
 pub type SubstitutionMap = HashMap<PlaceholderName, TemplateSubstitution>;
 
 // The value to substitute for a placeholder.
+#[derive(Debug)]
 pub enum TemplateSubstitution {
     // Just a string, used for the single placeholders.
     Single(String),
@@ -40,7 +41,7 @@ pub enum TemplateSubstitution {
 }
 
 // A template is basically many parts concatenated. See any of the files in '/resources/templates' for examples.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Template {
     pub parts: Vec<TemplatePart>,
 }

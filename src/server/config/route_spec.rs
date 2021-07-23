@@ -105,7 +105,7 @@ fn isolate_var_captures(route: &str) -> Vec<String> {
         if !prev_is_escape {
             is_var = if c == '{' { true } else if c == '}' && is_var { false } else { is_var };
         }
-        prev_is_escape = c == '\\';
+        prev_is_escape = !prev_is_escape && c == '\\';
 
         // Don't include escape characters in the final output.
         if prev_is_escape { None } else { Some((c, is_var)) }

@@ -10,7 +10,7 @@ routing_table:
   '@/{image_name:[a-zA-Z]+}/img': '/files/images/[image_name].jpg'
   '@/prime/{number:[0-9]\{3\}}': '/files/prime_cgi.py?n=[number]'
 
-  '/pdfs/{pdf_name}': '/files/pdfs/[pdf_name].pdf'
+  '@/pdfs/{pdf_name:\\w+}': '/files/pdfs/[pdf_name].pdf'
   '/pdfs': '/files/pdfs'
 
 cgi_executors:
