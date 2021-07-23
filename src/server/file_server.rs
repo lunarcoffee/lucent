@@ -111,7 +111,7 @@ impl FileServer {
 
     async fn main_loop(&self) -> io::Result<()> {
         let mut incoming = self.listener.incoming();
-        log::info("Server started.");
+        log::info("server started");
 
         loop {
             select! {
@@ -128,7 +128,7 @@ impl FileServer {
                 }
             }
         }
-        log::info("Server stopped.");
+        log::info("server stopped");
         Ok(())
     }
 }
@@ -186,16 +186,16 @@ fn client_intends_to_close(request: &Request) -> bool {
 
 impl Server for FileServer {
     fn start(&self) {
-        log::info(format!("Starting server on {}.", self.listener.local_addr().unwrap()));
+        log::info(format!("starting server on {}", self.listener.local_addr().unwrap()));
         if let Err(e) = task::block_on(self.main_loop()) {
-            log::warn(format!("Unexpected error during normal operation: {}", e));
+            log::warn(format!("unexpected error during normal operation: {}", e));
         }
     }
 
     fn stop(&self) {
-        log::info("Stopping server.");
+        log::info("stopping server");
         if let Err(e) = task::block_on(self.stop_sender.send(())) {
-            log::warn(format!("Unexpected error while stopping server: {}", e));
+            log::warn(format!("unexpected error while stopping server: {}", e));
         }
     }
 }

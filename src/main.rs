@@ -26,24 +26,27 @@ async fn main() {
         process::exit(1);
     }
 
+    log::info(format!("lucent v{}", consts::SERVER_VERSION));
     let config = Config::load(&args.nth(1).unwrap()).await
-        .unwrap_or_else(|| log::fatal("Configuration file invalid or missing required settings!"));
+        .unwrap_or_else(|| log::fatal("configuration file invalid or missing required options"));
 
     log::fatal(match FileServer::new(config).await {
         Ok(server) => {
             let server = Arc::new(server);
             let server_clone = Arc::clone(&server);
-            let _ = ctrlc::set_handler(move || server_clone.stop());
+            if let Err(_) = ctrlc::set_handler(move || server_clone.stop()) {
+                log::warn("failed to attach signal handler for graceful shutdown");
+            }
             return server.start();
         }
-        Err(FileServerStartError::InvalidFileRoot) => "File directory invalid!",
-        Err(FileServerStartError::InvalidTemplates) => "Template directory invalid or incomplete!",
-        Err(FileServerStartError::AddressInUse) => "That address is in use!",
-        Err(FileServerStartError::AddressUnavailable) => "That address is unavailable!",
-        Err(FileServerStartError::CannotBindAddress) => "Cannot bind to that address!",
-        Err(FileServerStartError::TlsCertNotFound) => "Cannot find TLS certificate file!",
-        Err(FileServerStartError::TlsKeyNotFound) => "Cannot find RSA private key file!",
-        Err(FileServerStartError::TlsInvalidCert) => "That TLS certificate is invalid!",
-        _ => "That RSA private key is invalid!",
+        Err(FileServerStartError::InvalidFileRoot) => "file directory invalid",
+        Err(FileServerStartError::InvalidTemplates) => "template directory invalid or missing files",
+        Err(FileServerStartError::AddressInUse) => "that address is in use",
+        Err(FileServerStartError::AddressUnavailable) => "that address is unavailable",
+        Err(FileServerStartError::CannotBindAddress) => "cannot bind to that address",
+        Err(FileServerStartError::TlsCertNotFound) => "cannot find TLS certificate file",
+        Err(FileServerStartError::TlsKeyNotFound) => "cannot find RSA private key file",
+        Err(FileServerStartError::TlsInvalidCert) => "that TLS certificate is invalid",
+        _ => "that RSA private key is invalid",
     });
 }

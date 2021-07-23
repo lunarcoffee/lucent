@@ -179,7 +179,7 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
             // Send the body without blocking, chunking it if desirable.
             match body {
                 Body::Stream(mut file, len) =>
-                    util::with_file_chunks(len, &mut file, |c| task::block_on(writer.write_all(&c))).await?,
+                    util::with_chunks(len, &mut file, |c| task::block_on(writer.write_all(&c))).await?,
                 Body::Bytes(bytes) => {
                     if chunked {
                         for chunk in bytes.chunks(consts::CHUNK_SIZE) {

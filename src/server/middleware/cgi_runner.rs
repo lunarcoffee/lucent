@@ -57,7 +57,7 @@ impl<'a> CgiRunner<'a> {
                     // Don't bother validating NPH output.
                     return Err(MiddlewareOutput::Bytes(output.stdout, false));
                 } else if output.stdout.is_empty() {
-                    log::warn(format!("CGI script `{}` returned an empty response!", self.script_path));
+                    log::warn(format!("empty response returned by CGI script `{}`", self.script_path));
                 } else {
                     // Add a status line to the CGI script's response.
                     let mut res = format!("{} {} \r\n", HttpVersion::Http11, Status::Ok).into_bytes();
@@ -70,13 +70,13 @@ impl<'a> CgiRunner<'a> {
                             log::info(format!("({}) {} {}", Status::Ok, self.request.method, self.request.uri));
                             return Err(MiddlewareOutput::Response(response, false));
                         }
-                        _ => log::warn(format!("CGI script `{}` returned an invalid response!", self.script_path)),
+                        _ => log::warn(format!("invalid response returned by CGI script `{}`", self.script_path)),
                     }
                 }
             }
             // If execution wasn't successful, output the contents of the script environment's stderr.
             Some(output) => {
-                log::warn(format!("Error in CGI script `{}` during execution:", self.script_path));
+                log::warn(format!("error in CGI script `{}` during execution:", self.script_path));
                 for line in String::from_utf8_lossy(&output.stderr).lines() {
                     log::warn(format!("| {}", line));
                 }
@@ -110,7 +110,7 @@ impl<'a> CgiRunner<'a> {
         ];
 
         let command = self.command_by_extension()
-            .map_err(|ext| log::warn(format!("No CGI script executor found for file extension `.{}`!", ext)))
+            .map_err(|ext| log::warn(format!("no CGI script executor found for file extension `.{}`", ext)))
             .ok()?;
 
         // Add some of the required variables to the environment and redirect the standard streams so we can access
@@ -145,13 +145,13 @@ impl<'a> CgiRunner<'a> {
             }
             Some(Body::Stream(file, len)) => {
                 let script_stdin = script.stdin.as_mut()?;
-                util::with_file_chunks(*len, file, |c| script_stdin.write_all(&c)).await.ok()?
+                util::with_chunks(*len, file, |c| script_stdin.write_all(&c)).await.ok()?
             }
             _ => {}
         };
 
         // Block on execution; this is probably not a fantastic idea, but oh well. :\
-        script.wait_with_output().map_err(|_| log::warn("Could not execute CGI script.")).ok()
+        script.wait_with_output().map_err(|_| log::warn("could not execute CGI script")).ok()
     }
 
 

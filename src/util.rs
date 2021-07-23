@@ -1,11 +1,10 @@
 use std::time::SystemTime;
 
-use async_std::fs::File;
 use async_std::io;
 use chrono::{DateTime, Local, Utc};
+use futures::{AsyncRead, AsyncReadExt};
 
 use crate::consts;
-use futures::AsyncReadExt;
 
 #[derive(Clone, Copy)]
 pub struct Range {
@@ -33,16 +32,17 @@ pub fn is_visible_char(ch: char) -> bool {
     ('!'..='~').contains(&ch)
 }
 
-// This iterates through `file` in chunks of a given size, calling `op` on each chunk. `op` may, for example, send the
-// chunk over a network.
-pub async fn with_file_chunks<F>(len: usize, file: &mut File, mut op: F) -> io::Result<()>
-    where F: FnMut(Vec<u8>) -> io::Result<()>
+// This iterates through the content of `reader` in chunks of a given size, calling `op` on each chunk. `op` may, for
+// example, send the chunk over a network.
+pub async fn with_chunks<R, F>(len: usize, reader: &mut R, mut op: F) -> io::Result<()>
+    where R: AsyncRead + Unpin,
+          F: FnMut(Vec<u8>) -> io::Result<()>
 {
     let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
     for n in 0..chunk_count {
         let chunk_len = if n == chunk_count - 1 { len % consts::READ_CHUNK_SIZE } else { consts::READ_CHUNK_SIZE };
         let mut chunk = vec![0; chunk_len];
-        file.read_exact(&mut chunk).await?;
+        reader.read_exact(&mut chunk).await?;
         op(chunk)?;
     }
     Ok(())
