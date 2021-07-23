@@ -104,20 +104,24 @@ impl<'a> DirectoryLister<'a> {
             // `symlink` is the file the symlink points to, or an empty string if the current file is not a symlink or
             // if we are configured to not show that info.
             let symlink = if metadata.is_symlink() {
-                let linked_file = fs::canonicalize(file.path()).await.ok()?;
-                let is_dir = linked_file.is_dir().await;
+                let config_show_symlinks = self.config.dir_listing.show_symlinks;
+                match fs::canonicalize(file.path()).await {
+                    Ok(linked_file) => {
+                        let is_dir = linked_file.is_dir().await;
 
-                // Add a slash to the file name if the symlink points to a directory. This is necessary since `is_dir`
-                // returns false for symlinks (even if they point to a directory), meaning `name` does not already have
-                // a trailing '/'.
-                if is_dir {
-                    name += "/";
-                }
+                        // Add a slash to the file name if the symlink points to a directory. This is necessary since
+                        // `is_dir` returns false for symlinks (even if they point to a directory), meaning `name` does
+                        // not already have a trailing '/'.
+                        if is_dir {
+                            name += "/";
+                        }
 
-                if self.config.dir_listing.show_symlinks {
-                    format!(" -> {}", linked_file.file_name()?.to_string_lossy()) + if is_dir { "/" } else { "" }
-                } else {
-                    String::new()
+                        let link = format!(" -> {}", linked_file.file_name()?.to_string_lossy())
+                            + if is_dir { "/" } else { "" };
+                        if config_show_symlinks { link } else { String::new() }
+                    }
+                    // Broken symlink.
+                    _ => if config_show_symlinks { " (broken symlink)".to_string() } else { String::new() },
                 }
             } else {
                 String::new()
