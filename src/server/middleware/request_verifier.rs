@@ -16,6 +16,7 @@ impl<'a, R: Read + Unpin, W: Write + Unpin> RequestVerifier<'a, R, W> {
         RequestVerifier { reader, writer }
     }
 
+    // Parses a request, converting any parser errors to a status response.
     pub async fn verify_request(&mut self) -> MiddlewareResult<Request> {
         match Request::new(self.reader, self.writer).await {
             Ok(req) => Ok(req),

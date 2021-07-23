@@ -63,7 +63,7 @@ impl Display for AbsolutePath {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let path_joined = self.path_as_string();
         let query_joined = self.query_as_string();
-        write!(f, "/{}{}", encode_percent(&path_joined), encode_percent(&query_joined))
+        write!(f, "/{}?{}", encode_percent(&path_joined), encode_percent(&query_joined))
     }
 }
 
