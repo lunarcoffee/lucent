@@ -8,12 +8,19 @@ use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
 use crate::util;
 use crate::util::Range;
 
+// The kind of range a request specifies.
 pub enum RangeBody {
+    // Send the full content of the resource.
     Entire,
+
+    // Send the specified range. The string is the value of the `Content-Range` header.
     Range(Range, String),
+
+    // Send the specified range with multipart. The string is the content type.
     MultipartRange(Vec<u8>, String),
 }
 
+// Parser for the 'Range' request header.
 pub struct RangeParser<'a> {
     headers: &'a Headers,
     body: &'a mut Body,
@@ -32,23 +39,32 @@ impl<'a> RangeParser<'a> {
         }
     }
 
+    // Attempts to parse the 'Range' header and return the corresponding `RangeBody`.
     pub async fn get_body(mut self) -> MiddlewareResult<RangeBody> {
         match self.headers.get(consts::H_RANGE) {
+            // No header; this is not a range request, send the entire body.
             None => Ok(RangeBody::Entire),
             Some(range) => {
                 let range = &range[0];
+
+                // We only support ranges specified in 'bytes', so ignore any other unit.
                 if range.len() < 7 || &range[..5] != consts::H_RANGE_UNIT_BYTES {
                     return Ok(RangeBody::Entire);
                 }
 
+                // Attempt to parse the specified ranges.
                 let ranges = range[6..].split(',').filter_map(|range| self.parse_range(range)).collect::<Vec<_>>();
                 match ranges.len() {
+                    // The ranges are invalid.
                     0 => Err(MiddlewareOutput::Status(Status::UnsatisfiableRange, false)),
                     1 => Ok(RangeBody::Range(ranges[0], self.get_content_range(&ranges[0]))),
                     _ => {
+                        // Generate the multipart boundary (`sep`) and the content type.
                         let time = util::get_time_utc();
                         let sep = format!("{:x}", time.timestamp_millis() + time.timestamp_nanos());
                         let content_type = format!("{}; boundary={}", consts::H_MEDIA_MULTIPART_RANGE, &sep);
+
+                        // Generate the new body to be sent.
                         Ok(RangeBody::MultipartRange(self.multipart_range_body(ranges, sep).await, content_type))
                     }
                 }

@@ -10,6 +10,8 @@ use crate::server::middleware::MiddlewareOutput;
 use crate::server::template::{SubstitutionMap, TemplateSubstitution};
 use crate::server::template::templates::Templates;
 
+// Processor for any `Err(MiddlewareOutput)` results from middleware, writing the appropriate response to `writer`,
+// using `templates` if necessary (i.e. for error pages). `request` is used to log the method and target.
 pub struct OutputProcessor<'a, W: Write + Unpin> {
     writer: &'a mut W,
     templates: &'a Templates,
@@ -21,6 +23,8 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         OutputProcessor { writer, templates, request }
     }
 
+    // Send the response specified by `output` to the client, returning whether the connection should be closed (true
+    // means it should be closed).
     pub async fn process(&mut self, output: MiddlewareOutput) -> bool {
         match output {
             MiddlewareOutput::Error(status, close) => self.respond_error(status, close).await,
@@ -31,6 +35,7 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         }
     }
 
+    // Generates and sends a templated error page with the given `status`.
     async fn respond_error(&mut self, status: Status, close: bool) -> bool {
         self.log_request(Some(status));
 
@@ -53,6 +58,7 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
             .is_err() || close
     }
 
+    // Responds with a request of the given `status` with no body.
     async fn respond_status(&mut self, status: Status, close: bool) -> bool {
         self.log_request(Some(status));
 
@@ -76,10 +82,12 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         }).await.is_err() || close
     }
 
+    // Logs the request status, along with the request's method and target if available.
     fn log_request(&self, status: Option<Status>) {
         let status = match status {
             Some(status) if status == Status::RequestTimeout => return,
             Some(status) => status.to_string(),
+            // No status is available; this usually comes from an NPH script, as their output is not parsed.
             _ => " - ".to_string(),
         };
 
