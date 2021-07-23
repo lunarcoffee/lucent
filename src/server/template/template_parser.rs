@@ -67,11 +67,9 @@ impl TemplateParser {
                 }
                 // Nothing special, extract everything until the next special character.
                 _ => {
-                    let start_of_next_part = chars[pos..]
-                        .iter()
+                    let start_of_next_part = chars[pos..].iter()
                         .position(|c| "[*\\".contains(*c))
-                        .unwrap_or(chars.len() - pos)
-                        + pos;
+                        .unwrap_or(chars.len() - pos) + pos;
                     let text = chars[pos..start_of_next_part].iter().collect();
 
                     // Jump to the next special character.

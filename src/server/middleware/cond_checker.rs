@@ -58,7 +58,7 @@ impl<'a> ConditionalChecker<'a> {
             if let Some(last_modified) = self.info.last_modified {
                 // If the document has not been modified since the client's provided time, they have the latest version
                 // of the resource, so an update should be fine. Ignore invalid values.
-                return match util::parse_time_imf(&since[0]) {
+                return match util::parse_time_rfc2616(&since[0]) {
                     Some(since) => last_modified <= since,
                     _ => true,
                 };
@@ -82,7 +82,7 @@ impl<'a> ConditionalChecker<'a> {
         } else if let Some(since) = self.headers.get(consts::H_IF_MODIFIED_SINCE) {
             if let Some(last_modified) = self.info.last_modified {
                 // If the resource has been modified after the client's specified time, their resource is outdated.
-                return match util::parse_time_imf(&since[0]) {
+                return match util::parse_time_rfc2616(&since[0]) {
                     Some(since) => last_modified > since,
                     _ => true,
                 };
@@ -102,7 +102,7 @@ impl<'a> ConditionalChecker<'a> {
 
                 // If the client's partial resource is up to date, continue handling the request (return true; this
                 // will handle the 'Range' header down the line); otherwise, send the new version (return false).
-                if let Some(since) = util::parse_time_imf(etag_or_date) {
+                if let Some(since) = util::parse_time_rfc2616(etag_or_date) {
                     if let Some(last_modified) = self.info.last_modified {
                         return last_modified == since;
                     }

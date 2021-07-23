@@ -6,6 +6,7 @@ use futures::{AsyncRead, AsyncReadExt};
 
 use crate::consts;
 
+// Used in handling range requests.
 #[derive(Clone, Copy)]
 pub struct Range {
     pub low: usize,
@@ -20,14 +21,17 @@ pub fn get_time_local() -> DateTime<Local> {
     SystemTime::now().into()
 }
 
-pub fn parse_time_imf(time: &str) -> Option<DateTime<Utc>> {
+// The following functions work with timestamps in the format used by HTTP (RFC 2616).
+
+pub fn parse_time_rfc2616(time: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_str(time, "%a, %d %b %Y %T GMT").ok().map(|t| t.with_timezone(&Utc))
 }
 
-pub fn format_time_imf(time: &DateTime<Utc>) -> String {
+pub fn format_time_rfc2616(time: &DateTime<Utc>) -> String {
     time.format("%a, %d %b %Y %T GMT").to_string()
 }
 
+// Visible characters ('vchar') as defined in RFC 7230.
 pub fn is_visible_char(ch: char) -> bool {
     ('!'..='~').contains(&ch)
 }
@@ -40,7 +44,9 @@ pub async fn with_chunks<R, F>(len: usize, reader: &mut R, mut op: F) -> io::Res
 {
     let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
     for n in 0..chunk_count {
+        // The final chunk may be smaller.
         let chunk_len = if n == chunk_count - 1 { len % consts::READ_CHUNK_SIZE } else { consts::READ_CHUNK_SIZE };
+
         let mut chunk = vec![0; chunk_len];
         reader.read_exact(&mut chunk).await?;
         op(chunk)?;
@@ -48,6 +54,7 @@ pub async fn with_chunks<R, F>(len: usize, reader: &mut R, mut op: F) -> io::Res
     Ok(())
 }
 
+// Gets a MIME type likely to be associated with a file extension.
 pub fn media_type_by_ext(ext: &str) -> &str {
     match ext {
         "aac" => consts::H_MEDIA_AAC,

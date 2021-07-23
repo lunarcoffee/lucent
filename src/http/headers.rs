@@ -37,7 +37,7 @@ impl Headers {
 
     // Assigns a value to a header, checking to see if the characters in the name and value are valid.
     pub fn set_one(&mut self, name: &str, value: &str) -> bool {
-        if !is_token_string(name) || !is_valid_header_value(&value) {
+        if !is_token_string(name) || !Self::is_valid_header_value(&value) {
             false
         } else {
             self.headers.insert(Self::normalize_header_name(name), vec![value.to_string()]);
@@ -47,7 +47,7 @@ impl Headers {
 
     // Assigns multiple values to a header name.
     pub fn set(&mut self, name: &str, values: Vec<&str>) -> bool {
-        if !is_token_string(name) || !values.iter().all(is_valid_header_value) {
+        if !is_token_string(name) || !values.iter().all(Self::is_valid_header_value) {
             false
         } else {
             let values = values.iter().map(|s| s.to_string()).collect();
@@ -68,23 +68,21 @@ impl Headers {
     fn normalize_header_name(name: &str) -> String {
         name.to_ascii_lowercase()
     }
+
+    // The standard defines the set of characters a header value may contain.
+    fn is_valid_header_value(str: &&str) -> bool {
+        str.chars().all(|c| util::is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
+    }
 }
 
 impl Debug for Headers {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let headers_joined = self
-            .headers
-            .iter()
+        let headers_joined = self.headers.iter()
             .map(|h| format!("{}: {}", h.0, h.1.join(", ")))
             .collect::<Vec<_>>()
             .join("\n");
         write!(f, "{}", headers_joined)
     }
-}
-
-// The standard defines a set of characters which a header value may contain.
-fn is_valid_header_value(str: &&str) -> bool {
-    str.chars().all(|c| util::is_visible_char(c) || consts::OPTIONAL_WHITESPACE.contains(&c))
 }
 
 const TOKEN_CHARS: &str = "!#$%&'*+-.^_`|~";
@@ -93,6 +91,6 @@ fn is_token_char(ch: char) -> bool {
     TOKEN_CHARS.contains(ch) || ch.is_ascii_alphanumeric()
 }
 
-pub fn is_token_string(str: &str) -> bool {
+fn is_token_string(str: &str) -> bool {
     str.chars().all(is_token_char)
 }

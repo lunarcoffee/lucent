@@ -12,14 +12,15 @@ use crate::server::config::Config;
 use crate::server::file_server::{FileServer, FileServerStartError};
 use crate::server::Server;
 
-mod server;
-mod log;
-mod http;
-mod util;
 mod consts;
+mod http;
+mod log;
+mod server;
+mod util;
 
 #[async_std::main]
 async fn main() {
+    // The only argument taken is mandatory, the path to the config file.
     let mut args = env::args();
     if args.len() != 2 {
         println!("usage: {} <config path>", args.next().unwrap());
@@ -31,6 +32,7 @@ async fn main() {
         .unwrap_or_else(|| log::fatal("configuration file invalid or missing required options"));
 
     log::fatal(match FileServer::new(config).await {
+        // Register a signal handler for graceful shutdowns and start the server.
         Ok(server) => {
             let server = Arc::new(server);
             let server_clone = Arc::clone(&server);
@@ -39,6 +41,7 @@ async fn main() {
             }
             return server.start();
         }
+        // Initialization failed, here's why.
         Err(FileServerStartError::InvalidFileRoot) => "file directory invalid",
         Err(FileServerStartError::InvalidTemplates) => "template directory invalid or missing files",
         Err(FileServerStartError::AddressInUse) => "that address is in use",

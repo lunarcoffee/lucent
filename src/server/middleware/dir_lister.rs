@@ -58,8 +58,7 @@ impl<'a> DirectoryLister<'a> {
 
         // Filter out hidden files (name starts with '.'), unless we are configured to show them. Always hide the
         // '.viewable' file if present, though.
-        let files = files
-            .into_iter()
+        let files = files.into_iter()
             .filter(|(f, _)| {
                 let name = f.file_name().to_string_lossy().to_string();
                 (self.config.dir_listing.show_hidden || !name.starts_with('.')) && name != ".viewable"

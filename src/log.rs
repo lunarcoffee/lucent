@@ -3,6 +3,7 @@ use std::process;
 
 use crate::util;
 
+// Logs a message and exits with an unsuccessful error code.
 pub fn fatal(msg: impl Display) -> ! {
     eprintln!("[ crit ] [ {} ] {}", get_time_now_formatted(), msg);
     process::exit(1);

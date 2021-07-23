@@ -91,7 +91,7 @@ impl MessageBuilder<Response> {
         let mut headers = Headers::from(HashMap::new());
         headers.set_one(consts::H_CONTENT_LENGTH, "0");
         headers.set_one(consts::H_SERVER, consts::SERVER_NAME_VERSION);
-        headers.set_one(consts::H_DATE, &util::format_time_imf(&util::get_time_utc()));
+        headers.set_one(consts::H_DATE, &util::format_time_rfc2616(&util::get_time_utc()));
 
         MessageBuilder {
             message: Response {

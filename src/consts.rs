@@ -12,12 +12,16 @@ pub const MAX_GET_BODY_LENGTH: usize = 4 << 20;
 pub const MAX_OTHER_BODY_LENGTH: usize = 512 << 20;
 pub const MAX_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_WRITE_TIMEOUT: Duration = Duration::from_secs(20);
-
 pub const MAX_BODY_BEFORE_CHUNK: usize = 8_192;
+
+// Size of the chunks (in bytes) for chunked transfer encoding and `util::with_chunks`, respectively.
 pub const CHUNK_SIZE: usize = 4_096;
 pub const READ_CHUNK_SIZE: usize = 65_536;
+
+// Name of the file used to mark a directory as viewable.
 pub const DIR_LISTING_VIEWABLE: &str = ".viewable";
 
+// Required template file names.
 pub const TEMPLATE_ERROR: &str = "error.html";
 pub const TEMPLATE_DIR_LISTING: &str = "dir_listing.html";
 

@@ -50,7 +50,7 @@ pub struct ResponseGenerator<'a> {
 impl<'a> ResponseGenerator<'a> {
     pub fn new(config: &'a Config, templates: &'a Templates, request: &'a mut Request, conn: &'a ConnInfo) -> Self {
         // This also does URL rewriting.
-        let (raw_target, routed_target, target_file) = get_req_targets(request, config);
+        let (raw_target, routed_target, target_file) = Self::get_req_targets(request, config);
 
         ResponseGenerator {
             config,
@@ -83,15 +83,14 @@ impl<'a> ResponseGenerator<'a> {
         // Get the information used to check conditional headers and generate the response body.
         let metadata = file.metadata().await?;
         let last_modified = Some(metadata.modified()?.into());
-        let etag = Some(generate_etag(&last_modified.unwrap()));
+        let etag = Some(Self::generate_etag(&last_modified.unwrap()));
         let info = CondInfo::new(etag, last_modified);
         self.set_body(&info, &metadata).await?;
 
-        let response = self
-            .response
+        let response = self.response
             // Allow the client to make conditional requests.
             .with_header(consts::H_ETAG, &info.etag.unwrap())
-            .with_header(consts::H_LAST_MODIFIED, &util::format_time_imf(&info.last_modified.unwrap().into()))
+            .with_header(consts::H_LAST_MODIFIED, &util::format_time_rfc2616(&info.last_modified.unwrap().into()))
             .with_body(self.body, &self.media_type)
             .build();
 
@@ -113,10 +112,8 @@ impl<'a> ResponseGenerator<'a> {
     async fn set_body(&mut self, info: &CondInfo, metadata: &Metadata) -> MiddlewareResult<()> {
         // Only support GET and HEAD requests to static resources.
         if self.request.method != Method::Get && self.request.method != Method::Head {
-            return self
-                // Instead of immediately sending a 405, try allowing a CGI script to respond to this request.
-                .set_file_body(true, info)
-                .await
+            // Instead of immediately sending a 405, try allowing a CGI script to respond to this request.
+            return self.set_file_body(true, info).await
                 .and(Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false)));
         }
 
@@ -125,9 +122,7 @@ impl<'a> ResponseGenerator<'a> {
             if self.config.dir_listing.enabled {
                 self.media_type = consts::H_MEDIA_HTML.to_string();
                 let listing = DirectoryLister::new(&self.routed_target, &self.target_file, self.templates, self.config)
-                    .get_listing_body()
-                    .await?
-                    .into_bytes();
+                    .get_listing_body().await?.into_bytes();
                 self.body = Body::Bytes(listing);
             } else {
                 // If directory listing is disabled, act as if no such resource exists.
@@ -156,9 +151,7 @@ impl<'a> ResponseGenerator<'a> {
 
             // Execute the script. If it exits successfully, the `MiddlewareOutput` with the result will propagate
             // upwards and be sent.
-            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph)
-                .get_response()
-                .await?;
+            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph).get_response().await?;
         }
 
         // Check conditional headers and set the body for non-script files.
@@ -207,65 +200,68 @@ impl<'a> ResponseGenerator<'a> {
         }
         Ok(())
     }
-}
 
-// Gets the request's original target, the target after URL rewriting, and the path for the resource the rewritten
-// target points to.
-fn get_req_targets(request: &mut Request, config: &Config) -> (String, String, String) {
-    let raw_target = request.uri.to_string();
-    let routed_target = rewrite_url(config, &raw_target).unwrap_or(raw_target.to_string());
+    // Gets the request's original target, the target after URL rewriting, and the path for the resource the rewritten
+    // target points to.
+    fn get_req_targets(request: &mut Request, config: &Config) -> (String, String, String) {
+        let raw_target = request.uri.to_string();
+        let routed_target = Self::rewrite_url(config, &raw_target).unwrap_or(raw_target.to_string());
 
-    let target_file = match Uri::from(&request.method, &routed_target) {
-        Ok(uri) => {
-            request.uri = uri;
-            format!("{}/{}", &config.file_root, request.uri.to_string_no_query())
-        }
-        _ => format!("{}{}", &config.file_root, &routed_target)
-    };
-    (raw_target, routed_target, target_file)
-}
-
-// Rewrite the given URL (`raw_target`) using the configured routing table. If no rule in the table matches the URL,
-// `None` is returned.
-fn rewrite_url(config: &Config, raw_target: &str) -> Option<String> {
-    // Search the routing table for a matching `RouteSpec`.
-    for (RouteSpec(rule_regex), RouteReplacement(replacement)) in &config.routing_table {
-        // Test if the `RouteSpec` matches; if it does, the captures should correspond to the path variables.
-        if let Some(capture) = rule_regex.captures(raw_target) {
-            // Create the `SubstitutionMap` for rewriting this URL. Start by iterating over the regex's captures and
-            // their corresponding placeholder names, skipping the first one as that capture has the entire match.
-            let sub = capture.iter().zip(rule_regex.capture_names()).skip(1)
-                // For every capture, turn the corresponding placeholder name and value into an entry; i.e., use that
-                // captured value when substituting that placeholder.
-                .flat_map(|(captures, name)| captures.into_iter()
-                    .map(move |c| (name.unwrap().to_string(), TemplateSubstitution::Single(c.as_str().to_string()))))
-                .collect::<SubstitutionMap>();
-
-            // Find the end of the match; if this `RouteSpec` only matches a prefix, the remaining text should be
-            // retained after rewriting (i.e. if '/hello/world' matches a rule for {'/hello' -> '/bye'}, the result
-            // should be '/bye/world' and not '/bye', even though only the '/hello' prefix matched the regex).
-            let end_match = rule_regex.find(raw_target).unwrap().end();
-
-            // Rewrite the URL and add any remaining unmatched part.
-            return Some(replacement.substitute(&sub)? + &raw_target[end_match..]);
-        }
+        let target_file = match Uri::from(&request.method, &routed_target) {
+            Ok(uri) => {
+                request.uri = uri;
+                format!("{}/{}", &config.file_root, request.uri.to_string_no_query())
+            }
+            _ => format!("{}{}", &config.file_root, &routed_target)
+        };
+        (raw_target, routed_target, target_file)
     }
 
-    // This URL is not rewritten.
-    None
-}
+    // Rewrite the given URL (`raw_target`) using the configured routing table. If no rule in the table matches the
+    // URL, `None` is returned.
+    fn rewrite_url(config: &Config, raw_target: &str) -> Option<String> {
+        // Search the routing table for a matching `RouteSpec`.
+        for (RouteSpec(rule_regex), RouteReplacement(replacement)) in &config.routing_table {
+            // Test if the `RouteSpec` matches; if it does, the captures should correspond to the path variables.
+            if let Some(capture) = rule_regex.captures(raw_target) {
+                // Create the `SubstitutionMap` for rewriting this URL. Start by going over the regex's captures and
+                // their corresponding placeholder names/
+                let sub = capture.iter().zip(rule_regex.capture_names())
+                    // Skip the first one; that capture has the entire match.
+                    .skip(1)
+                    // For every capture, turn the corresponding placeholder name and value into an entry; i.e., use
+                    // that captured value when substituting that placeholder.
+                    .flat_map(|(captures, name)| captures.into_iter()
+                        .map(move |c|
+                            (name.unwrap().to_string(), TemplateSubstitution::Single(c.as_str().to_string()))))
+                    .collect::<SubstitutionMap>();
 
-// Generate an entity-tag for a resource given its last modified time. This is a weak ETag... but we treat it like a
-// strong one anyway.
-fn generate_etag(modified: &DateTime<Utc>) -> String {
-    let mut hasher = DefaultHasher::new();
+                // Find the end of the match; if this `RouteSpec` only matches a prefix, the remaining text should be
+                // retained after rewriting (i.e. if '/hello/world' matches a rule for {'/hello' -> '/bye'}, the result
+                // should be '/bye/world' and not '/bye', even though only the '/hello' prefix matched the regex).
+                let end_match = rule_regex.find(raw_target).unwrap().end();
 
-    // Start with the hash of the time as a string.
-    let time = util::format_time_imf(modified);
-    time.hash(&mut hasher);
-    let etag = format!("\"{:x}", hasher.finish());
+                // Rewrite the URL and add any remaining unmatched part.
+                return Some(replacement.substitute(&sub)? + &raw_target[end_match..]);
+            }
+        }
 
-    // Add on the hash of the reversed time string.
-    time.chars().into_iter().rev().collect::<String>().hash(&mut hasher);
-    etag + &format!("{:x}\"", hasher.finish())
+        // This URL is not rewritten.
+        None
+    }
+
+    // Generate an entity-tag for a resource given its last modified time. This is a weak ETag... but we treat it like
+    // a strong one anyway.
+    fn generate_etag(modified: &DateTime<Utc>) -> String {
+        let mut hasher = DefaultHasher::new();
+
+        // Start with the hash of the time as a string.
+        let time = util::format_time_rfc2616(modified);
+        time.hash(&mut hasher);
+        let etag = format!("\"{:x}", hasher.finish());
+
+        // Add on the hash of the reversed time string.
+        time.chars().into_iter().rev().collect::<String>().hash(&mut hasher);
+        etag + &format!("{:x}\"", hasher.finish())
+    }
 }

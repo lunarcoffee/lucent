@@ -31,8 +31,7 @@ impl<'a> Visitor<'a> for RouteReplacementStringVisitor {
         where E: de::Error
     {
         // Make sure the rule starts with a slash (i.e. specifies a route). `Template::new` does syntax checking.
-        str.starts_with('/')
-            .then(|| str)
+        str.starts_with('/').then(|| str)
             .and_then(|s| Template::new(s.to_string()))
             .map(|t| RouteReplacement(t))
             .ok_or(E::custom("expected route replacement"))

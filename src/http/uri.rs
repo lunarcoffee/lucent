@@ -48,8 +48,7 @@ impl AbsolutePath {
     // Returns the formatted query string.
     pub fn query_as_string(&self) -> String {
         match &self.query {
-            Query::ParamMap(map) => map
-                .iter()
+            Query::ParamMap(map) => map.iter()
                 .map(|(name, value)| format!("{}={}", name, value))
                 .collect::<Vec<_>>()
                 .join("&"),
@@ -257,39 +256,39 @@ impl UriParser<'_, '_> {
         }
 
         // Parse the query.
-        Ok(AbsolutePath { path, query: parse_query(raw_query)? })
+        Ok(AbsolutePath { path, query: Self::parse_query(raw_query)? })
     }
-}
 
-// Parse the query parameters, if present (non-empty).
-fn parse_query(raw_query: &str) -> MessageParseResult<Query> {
-    Ok(if raw_query.is_empty() {
-        Query::None
-    } else if raw_query.contains('=') {
-        // Split each query parameter pair, then split each pair into key and value.
-        let params = raw_query.split('&')
-            .map(|param| param.splitn(2, '=').collect::<Vec<&str>>())
-            .collect::<Vec<_>>();
+    // Parse the query parameters, if present (non-empty).
+    fn parse_query(raw_query: &str) -> MessageParseResult<Query> {
+        Ok(if raw_query.is_empty() {
+            Query::None
+        } else if raw_query.contains('=') {
+            // Split each query parameter pair, then split each pair into key and value.
+            let params = raw_query.split('&')
+                .map(|param| param.splitn(2, '=').collect::<Vec<&str>>())
+                .collect::<Vec<_>>();
 
-        // Terminate if not all parameter pairs are of length two (i.e. if there was no '=' to split on), or if
-        // there are invalid characters anywhere.
-        err_if!(!params.iter()
+            // Terminate if not all parameter pairs are of length two (i.e. if there was no '=' to split on), or if
+            // there are invalid characters anywhere.
+            err_if!(!params.iter()
                 .all(|p| p.len() == 2 && p[0].chars().all(is_query_char) && p[1].chars().all(is_query_char)));
 
-        // Percent-decode the parameters.
-        let query = params.iter()
-            .map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
-            .collect::<Option<HashMap<_, _>>>()
-            .ok_or(MessageParseError::InvalidUri)?;
-        Query::ParamMap(query)
-    } else {
-        // Split into pieces and decode.
-        let params = raw_query.split('+')
-            .map(|term| decode_percent(term))
-            .collect::<Option<Vec<_>>>()
-            .ok_or(MessageParseError::InvalidUri)?;
-        Query::SearchString(params)
-    })
+            // Percent-decode the parameters.
+            let query = params.iter()
+                .map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
+                .collect::<Option<HashMap<_, _>>>()
+                .ok_or(MessageParseError::InvalidUri)?;
+            Query::ParamMap(query)
+        } else {
+            // Split into pieces and decode.
+            let params = raw_query.split('+')
+                .map(|term| decode_percent(term))
+                .collect::<Option<Vec<_>>>()
+                .ok_or(MessageParseError::InvalidUri)?;
+            Query::SearchString(params)
+        })
+    }
 }
 
 // The URI spec defines many sets of characters, using them to specify which characters are allowed in what parts of a

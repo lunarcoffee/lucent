@@ -163,8 +163,7 @@ impl<'a> CgiRunner<'a> {
     // Replace newlines ('\n') in the sections before the body with CRLFs.
     fn replace_crlf_nl(res: Vec<u8>) -> Vec<u8> {
         let body_index = res.windows(2).position(|a| a[0] == b'\n' && a[1] == b'\n').unwrap_or(res.len() - 2) + 2;
-        let mut fixed = res[..body_index]
-            .iter()
+        let mut fixed = res[..body_index].iter()
             .flat_map(|b| if *b == b'\n' { vec![b'\r', b'\n'] } else { vec![*b] })
             .collect::<Vec<_>>();
 
