@@ -3,6 +3,13 @@ address: '127.0.0.1:1440'
 file_root: 'resources/www'
 template_root: 'resources/templates'
 
+dir_listing:
+  enabled: true
+
+  all_viewable: false
+  show_symlinks: true
+  show_hidden: false
+
 routing_table:
   '@/': '/index.html'
   '@/cgi': '/files/hello_cgi.py'

@@ -1,4 +1,5 @@
 #![feature(box_syntax)]
+#![feature(is_symlink)]
 #![feature(slice_as_chunks)]
 #![feature(slice_group_by)]
 

@@ -101,11 +101,16 @@ impl<'a> ResponseGenerator<'a> {
         }
 
         if metadata.is_dir() {
-            self.media_type = consts::H_MEDIA_HTML.to_string();
-            self.body = Body::Bytes(DirectoryLister::new(&self.routed_target, &self.target_file, self.templates)
-                .get_listing_body()
-                .await?
-                .into_bytes());
+            if self.config.dir_listing.enabled {
+                self.media_type = consts::H_MEDIA_HTML.to_string();
+                let listing = DirectoryLister::new(&self.routed_target, &self.target_file, self.templates, self.config)
+                    .get_listing_body()
+                    .await?
+                    .into_bytes();
+                self.body = Body::Bytes(listing);
+            } else {
+                return Err(MiddlewareOutput::Error(Status::NotFound, false));
+            }
         } else {
             self.set_file_body(false, info, metadata).await?;
         }

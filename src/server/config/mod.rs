@@ -18,14 +18,17 @@ pub mod route_replacement;
 // Options from the config file (see '/resources/config.yaml').
 #[derive(Clone, Deserialize)]
 pub struct Config {
+    // The address on which to host the server.
+    pub address: String,
+
     // The directory containing the files to serve.
     pub file_root: String,
 
     // The directory containing templates used to generate server pages (i.e. directory listings or error pages).
     pub template_root: String,
 
-    // The address on which to host the server.
-    pub address: String,
+    // Configuration options for directory listings.
+    pub dir_listing: DirectoryListingConfig,
 
     // The URL rewriting rules, each consisting of an expression which is matched against routes and an expression that
     // specifies how to rewrite the route.
@@ -44,7 +47,22 @@ pub struct Config {
     pub tls: Option<TlsConfig>,
 }
 
-// TLS certificate and private key file paths.
+#[derive(Clone, Deserialize)]
+pub struct DirectoryListingConfig {
+    // If false, a 404 will be sent when accessing a directory that exists, as if it did not.
+    pub enabled: bool,
+
+    // If true, all directories will behave as if they had a '.viewable' file in them.
+    pub all_viewable: bool,
+
+    // If true, show the entry a symlink points to.
+    pub show_symlinks: bool,
+
+    // If true, entries with names beginning with '.' will be shown (they are hidden by default), with the exception
+    // of the '.viewable' file which allows a directory to be viewed (unless `all_viewable` is true).
+    pub show_hidden: bool,
+}
+
 #[derive(Clone, Deserialize)]
 pub struct TlsConfig {
     // The paths to the certificate and private key files.
