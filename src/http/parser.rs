@@ -1,18 +1,18 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::error;
+use std::{collections::HashMap, convert::TryFrom, error};
 
-use async_std::{io, prelude::Future};
-use async_std::io::{BufRead, Write};
-use async_std::io::prelude::BufReadExt;
+use async_std::{io::{self, BufRead, prelude::BufReadExt, Write}, prelude::Future};
 use futures::AsyncReadExt;
 
-use crate::consts;
-use crate::http::headers::Headers;
-use crate::http::message::{Body, MessageBuilder};
-use crate::http::request::{HttpVersion, Method, Request};
-use crate::http::response::{Response, Status};
-use crate::http::uri::Uri;
+use crate::{
+    consts,
+    http::{
+        headers::Headers,
+        message::{Body, MessageBuilder},
+        request::{HttpVersion, Method, Request},
+        response::{Response, Status},
+        uri::Uri,
+    },
+};
 
 #[derive(Copy, Clone, Debug)]
 pub enum MessageParseError {

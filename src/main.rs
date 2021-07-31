@@ -5,12 +5,9 @@
 
 use std::env;
 
-use async_std::process;
-use async_std::sync::Arc;
+use async_std::{process, sync::Arc};
 
-use crate::server::config::Config;
-use crate::server::file_server::{FileServer, FileServerStartError};
-use crate::server::Server;
+use crate::server::{config::Config, file_server::{FileServer, FileServerStartError::*}, Server};
 
 mod consts;
 mod http;
@@ -42,14 +39,14 @@ async fn main() {
             return server.start();
         }
         // Initialization failed, here's why.
-        Err(FileServerStartError::InvalidFileRoot) => "file directory invalid",
-        Err(FileServerStartError::InvalidTemplates) => "template directory invalid or missing files",
-        Err(FileServerStartError::AddressInUse) => "that address is in use",
-        Err(FileServerStartError::AddressUnavailable) => "that address is unavailable",
-        Err(FileServerStartError::CannotBindAddress) => "cannot bind to that address",
-        Err(FileServerStartError::TlsCertNotFound) => "cannot find TLS certificate file",
-        Err(FileServerStartError::TlsKeyNotFound) => "cannot find RSA private key file",
-        Err(FileServerStartError::TlsInvalidCert) => "that TLS certificate is invalid",
+        Err(InvalidFileRoot) => "file directory invalid",
+        Err(InvalidTemplates) => "template directory invalid or missing files",
+        Err(AddressInUse) => "that address is in use",
+        Err(AddressUnavailable) => "that address is unavailable",
+        Err(CannotBindAddress) => "cannot bind to that address",
+        Err(TlsCertNotFound) => "cannot find TLS certificate file",
+        Err(TlsKeyNotFound) => "cannot find RSA private key file",
+        Err(TlsInvalidCert) => "that TLS certificate is invalid",
         _ => "that RSA private key is invalid",
     });
 }

@@ -1,16 +1,14 @@
-use std::fmt::{Display, Formatter};
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 
-use async_std::io;
-use async_std::io::{BufReader, BufWriter, Write};
-use async_std::io::prelude::Read;
+use async_std::io::{self, BufReader, BufWriter, prelude::Read, Write};
 use num_enum::TryFromPrimitive;
 
-use crate::http::headers::Headers;
-use crate::http::message::{Body, Message};
-use crate::http::message;
-use crate::http::parser::{MessageParser, MessageParseResult};
-use crate::http::request::HttpVersion;
+use crate::http::{
+    headers::Headers,
+    message::{self, Body, Message},
+    parser::{MessageParser, MessageParseResult},
+    request::HttpVersion,
+};
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, TryFromPrimitive)]
 #[repr(usize)]

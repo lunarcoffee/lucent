@@ -1,11 +1,10 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::fmt;
+use std::{collections::HashMap, fmt::{self, Display, Formatter}};
 
-use crate::consts;
-use crate::http::parser::{MessageParseError, MessageParseResult};
-use crate::http::request::Method;
-use crate::util;
+use crate::{
+    consts,
+    http::{parser::{MessageParseError, MessageParseResult}, request::Method},
+    util,
+};
 
 // The authority portion of a URI containing the host, and some optional info.
 pub struct Authority {

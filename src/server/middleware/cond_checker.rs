@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 
-use crate::consts;
-use crate::http::headers::Headers;
-use crate::http::response::Status;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::util;
+use crate::{
+    consts,
+    http::{headers::Headers, response::Status},
+    server::middleware::{MiddlewareOutput, MiddlewareResult},
+    util,
+};
 
 // Info for a resource (i.e. file) used to determine if the client's cached copy is still up to date.
 pub struct CondInfo {

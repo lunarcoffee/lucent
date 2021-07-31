@@ -1,29 +1,28 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
 
-use async_std::fs::{File, Metadata};
-use async_std::io::{prelude::SeekExt, SeekFrom};
-use async_std::path::Path;
+use async_std::{fs::{File, Metadata}, io::{prelude::SeekExt, SeekFrom}, path::Path};
 use chrono::{DateTime, Utc};
 
-use crate::{log, util};
-use crate::consts;
-use crate::http::message::{Body, MessageBuilder};
-use crate::http::request::{Method, Request};
-use crate::http::response::{Response, Status};
-use crate::http::uri::Uri;
-use crate::server::config::Config;
-use crate::server::config::route_replacement::RouteReplacement;
-use crate::server::config::route_spec::RouteSpec;
-use crate::server::file_server::ConnInfo;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::server::middleware::basic_auth::BasicAuthChecker;
-use crate::server::middleware::cgi_runner::CgiRunner;
-use crate::server::middleware::cond_checker::{CondInfo, ConditionalChecker};
-use crate::server::middleware::dir_lister::DirectoryLister;
-use crate::server::middleware::range_parser::{RangeBody, RangeParser};
-use crate::server::template::{SubstitutionMap, TemplateSubstitution};
-use crate::server::template::templates::Templates;
+use crate::{
+    consts,
+    http::{message::{Body, MessageBuilder}, request::{Method, Request}, response::{Response, Status}, uri::Uri},
+    log,
+    server::{
+        config::{Config, route_replacement::RouteReplacement, route_spec::RouteSpec},
+        file_server::ConnInfo,
+        middleware::{
+            basic_auth::BasicAuthChecker,
+            cgi_runner::CgiRunner,
+            cond_checker::{CondInfo, ConditionalChecker},
+            dir_lister::DirectoryLister,
+            MiddlewareOutput,
+            MiddlewareResult,
+            range_parser::{RangeBody, RangeParser},
+        },
+        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+    },
+    util,
+};
 
 // This generates an appropriate response for a single request.
 pub struct ResponseGenerator<'a> {
@@ -151,7 +150,7 @@ impl<'a> ResponseGenerator<'a> {
 
             // Execute the script. If it exits successfully, the `MiddlewareOutput` with the result will propagate
             // upwards and be sent.
-            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph).get_response().await?;
+            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph).script_response().await?;
         }
 
         // Check conditional headers and set the body for non-script files.

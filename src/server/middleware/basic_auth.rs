@@ -1,13 +1,14 @@
 use pwhash::bcrypt;
 
-use crate::{consts, log};
-use crate::http::message::MessageBuilder;
-use crate::http::request::Request;
-use crate::http::response::Response;
-use crate::http::response::Status;
-use crate::server::config::Config;
-use crate::server::config::realm_info::{Credentials, RealmInfo};
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::{
+    consts,
+    http::{message::MessageBuilder, request::Request, response::{Response, Status}},
+    log,
+    server::{
+        config::{Config, realm_info::{Credentials, RealmInfo}},
+        middleware::{MiddlewareOutput, MiddlewareResult},
+    },
+};
 
 // Authenticates the `request` using HTTP basic authentication, checking against credentials in the `config`.
 pub struct BasicAuthChecker<'a> {

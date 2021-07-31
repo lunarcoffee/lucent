@@ -1,10 +1,9 @@
-use async_std::io::prelude::Read;
-use async_std::io::Write;
+use async_std::io::{prelude::Read, Write};
 
-use crate::http::parser::MessageParseError;
-use crate::http::request::Request;
-use crate::http::response::Status;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::{
+    http::{parser::MessageParseError, request::Request, response::Status},
+    server::middleware::{MiddlewareOutput, MiddlewareResult},
+};
 
 pub struct RequestVerifier<'a, R: Read + Unpin, W: Write + Unpin> {
     reader: &'a mut R,

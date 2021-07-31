@@ -1,14 +1,14 @@
-use async_std::io::{self, Write};
-use async_std::io::prelude::WriteExt;
+use async_std::io::{self, prelude::WriteExt, Write};
 
-use crate::consts;
-use crate::http::message::{Body, MessageBuilder};
-use crate::http::request::{Method, Request};
-use crate::http::response::{Response, Status};
-use crate::log;
-use crate::server::middleware::MiddlewareOutput;
-use crate::server::template::{SubstitutionMap, TemplateSubstitution};
-use crate::server::template::templates::Templates;
+use crate::{
+    consts,
+    http::{message::{Body, MessageBuilder}, request::{Method, Request}, response::{Response, Status}},
+    log,
+    server::{
+        middleware::MiddlewareOutput,
+        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+    },
+};
 
 // Processor for any `Err(MiddlewareOutput)` results from middleware, writing the appropriate response to `writer`,
 // using `templates` if necessary (i.e. for error pages). `request` is used to log the method and target.

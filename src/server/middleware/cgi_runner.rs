@@ -50,8 +50,8 @@ impl<'a> CgiRunner<'a> {
     }
 
     // Attempt to run a CGI script, returning its output if successful and an error status otherwise.
-    pub async fn get_response(&mut self) -> MiddlewareResult<()> {
-        match self.get_script_output().await {
+    pub async fn script_response(&mut self) -> MiddlewareResult<()> {
+        match self.execute_script().await {
             Some(output) if output.status.success() => {
                 if self.is_nph {
                     // Don't bother validating NPH output.
@@ -90,7 +90,7 @@ impl<'a> CgiRunner<'a> {
     }
 
     // Set up the script's execution environment and run it.
-    async fn get_script_output(&mut self) -> Option<Output> {
+    async fn execute_script(&mut self) -> Option<Output> {
         let uri = self.request.uri.to_string();
         let uri_no_file = &uri[..uri.rfind('/')?];
         let remote_addr = &self.conn_info.remote_addr.to_string();

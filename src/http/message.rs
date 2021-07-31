@@ -1,16 +1,12 @@
 use std::collections::HashMap;
 
-use async_std::fs::File;
-use async_std::io;
-use async_std::io::prelude::WriteExt;
-use async_std::io::Write;
-use async_std::task;
+use async_std::{fs::File, io::{self, prelude::WriteExt, Write}, task};
 
-use crate::{consts, util};
-use crate::http::headers::Headers;
-use crate::http::request::{HttpVersion, Method, Request};
-use crate::http::response::{Response, Status};
-use crate::http::uri::Uri;
+use crate::{
+    consts,
+    http::{headers::Headers, request::{HttpVersion, Method, Request}, response::{Response, Status}, uri::Uri},
+    util,
+};
 
 // The body of an HTTP request or response.
 pub enum Body {

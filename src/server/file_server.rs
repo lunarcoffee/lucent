@@ -1,29 +1,31 @@
-use std::fs::File;
-use std::io::{Seek, SeekFrom};
-use std::str::FromStr;
+use std::{fs::File, io::{Seek, SeekFrom}, str::FromStr};
 
-use async_std::{channel, task};
-use async_std::channel::{Receiver, Sender};
-use async_std::io::{self, BufReader, BufWriter};
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
-use async_std::path::Path;
-use async_std::prelude::StreamExt;
-use async_std::sync::Arc;
+use async_std::{
+    channel::{self, Receiver, Sender},
+    io::{self, BufReader, BufWriter},
+    net::{SocketAddr, TcpListener, TcpStream},
+    path::Path,
+    prelude::StreamExt,
+    sync::Arc,
+    task,
+};
 use async_tls::TlsAcceptor;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, FutureExt, select};
-use futures::io::ErrorKind;
-use rustls::{NoClientAuth, ServerConfig};
-use rustls::internal::pemfile;
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, FutureExt, io::ErrorKind, select};
+use rustls::{internal::pemfile, NoClientAuth, ServerConfig};
 
-use crate::consts;
-use crate::http::request::{HttpVersion, Request};
-use crate::log;
-use crate::server::config::Config;
-use crate::server::middleware::output_processor::OutputProcessor;
-use crate::server::middleware::request_verifier::RequestVerifier;
-use crate::server::middleware::response_gen::ResponseGenerator;
-use crate::server::Server;
-use crate::server::template::templates::Templates;
+use crate::{
+    consts,
+    http::request::{HttpVersion, Request},
+    log,
+    server::{
+        config::Config,
+        middleware::{
+            output_processor::OutputProcessor, request_verifier::RequestVerifier, response_gen::ResponseGenerator,
+        },
+        Server,
+        template::templates::Templates,
+    },
+};
 
 // Info for a client connection.
 pub struct ConnInfo {

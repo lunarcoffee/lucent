@@ -1,5 +1,4 @@
-use std::fmt::Display;
-use std::process;
+use std::{fmt::Display, process};
 
 use crate::util;
 

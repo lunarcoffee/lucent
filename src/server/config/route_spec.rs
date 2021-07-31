@@ -1,9 +1,7 @@
-use std::fmt::{self, Formatter};
-use std::hash::{Hash, Hasher};
+use std::{fmt::{self, Formatter}, hash::{Hash, Hasher}};
 
 use regex::Regex;
-use serde::{de, Deserialize, Deserializer};
-use serde::de::Visitor;
+use serde::{de::{self, Visitor}, Deserialize, Deserializer};
 
 // A rule which matches against routes. The syntax is just like a route, except you may capture parts of the route as
 // variables (even conditionally, with regex). These can then be used in the corresponding `RouteReplacement`.

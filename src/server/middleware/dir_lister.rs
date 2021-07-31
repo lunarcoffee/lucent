@@ -1,17 +1,18 @@
 use std::time::{self, Duration};
 
-use async_std::fs;
-use async_std::fs::{DirEntry, Metadata};
-use async_std::path::Path;
+use async_std::{fs::{self, DirEntry, Metadata}, path::Path};
 use chrono::{TimeZone, Utc};
 use futures::StreamExt;
 
-use crate::consts;
-use crate::http::response::Status;
-use crate::server::config::Config;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::server::template::{SubstitutionMap, TemplateSubstitution};
-use crate::server::template::templates::Templates;
+use crate::{
+    consts,
+    http::response::Status,
+    server::{
+        config::Config,
+        middleware::{MiddlewareOutput, MiddlewareResult},
+        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+    },
+};
 
 // Directory listing generator for `dir` using a template from `templates`.
 pub struct DirectoryLister<'a> {

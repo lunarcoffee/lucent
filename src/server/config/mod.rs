@@ -4,9 +4,7 @@ use async_std::fs;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 
-use crate::server::config::realm_info::RealmInfo;
-use crate::server::config::route_replacement::RouteReplacement;
-use crate::server::config::route_spec::RouteSpec;
+use crate::server::config::{realm_info::RealmInfo, route_replacement::RouteReplacement, route_spec::RouteSpec};
 
 // Basic authentication structs and serde `Deserialize` implementations.
 pub mod realm_info;

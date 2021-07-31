@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::fmt;
+use std::{collections::HashMap, fmt::{self, Debug, Formatter}};
 
-use crate::consts;
-use crate::util;
+use crate::{consts, util};
 
 // Headers names which may contain more than one value.
 const MULTI_VALUE_HEADER_NAMES: &[&str] = &[

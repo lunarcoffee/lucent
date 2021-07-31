@@ -1,2 +1,19 @@
 # lucent
-Lucent is a web server written in Rust with a number of features (including CGI/NPH script execution, URL rewriting, dynamically generated directory listings, crude HTTP basic authentication, a simple template engine, and HTTPS support with rustls) and an implementation of HTTP/1.1 written from the ground up. The goal of this project wasn't to build a production ready web server, but just to implement a large subset of the HTTP/1.1 spec in order to gain a deeper understanding of its inner workings. Despite this, it's turned out to be usable enough in serving my [website](https://lunarcoffee.cf).
+
+lucent is a lightweight web server, with a mostly RFC-compliant implementation of HTTP/1.1 written from scratch (as a
+fun exercise). Major features include:
+
+- URL rewriting
+- CGI/NPH scripting support
+- Generated directory listings
+- HTTPS (with [rustls](https://github.com/ctz/rustls))
+- HTTP basic authentication
+
+It should be quick and easy to spin up an instance; see the [usage](#usage) section.
+## Building
+
+TODO
+
+## Usage
+
+TODO

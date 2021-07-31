@@ -1,7 +1,6 @@
 use async_std::fs;
 
-use crate::consts;
-use crate::server::template::Template;
+use crate::{consts, server::template::Template};
 
 // The templates used by `FileServer`. This should be initialized once, perhaps during initialization.
 #[derive(Clone)]

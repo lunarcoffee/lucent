@@ -1,14 +1,13 @@
-use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 
-use async_std::io::{self, BufReader, BufWriter, Write};
-use async_std::io::prelude::Read;
+use async_std::io::{self, BufReader, BufWriter, prelude::Read, Write};
 
-use crate::http::headers::Headers;
-use crate::http::message::{Body, Message};
-use crate::http::message;
-use crate::http::parser::{MessageParser, MessageParseResult};
-use crate::http::uri::Uri;
+use crate::http::{
+    headers::Headers,
+    message::{self, Body, Message},
+    parser::{MessageParser, MessageParseResult},
+    uri::Uri,
+};
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Method {

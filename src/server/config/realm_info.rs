@@ -1,7 +1,6 @@
 use std::fmt::{self, Formatter};
 
-use serde::{Deserialize, Deserializer};
-use serde::de::{Error, MapAccess, Visitor};
+use serde::{de::{Error, MapAccess, Visitor}, Deserialize, Deserializer};
 
 use crate::server::config::route_spec::RouteSpec;
 

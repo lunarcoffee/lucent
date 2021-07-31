@@ -1,13 +1,11 @@
-use async_std::io::ErrorKind;
-use async_std::io::prelude::ReadExt;
+use async_std::io::{ErrorKind, prelude::ReadExt};
 
-use crate::consts;
-use crate::http::headers::Headers;
-use crate::http::message::Body;
-use crate::http::response::Status;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
-use crate::util;
-use crate::util::Range;
+use crate::{
+    consts,
+    http::{headers::Headers, message::Body, response::Status},
+    server::middleware::{MiddlewareOutput, MiddlewareResult},
+    util::{self, Range},
+};
 
 // The kind of range a request specifies.
 pub enum RangeBody {
