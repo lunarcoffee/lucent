@@ -159,14 +159,14 @@ impl FileServer {
             Some(acceptor) => match acceptor.accept(stream).await {
                 Ok(stream) => {
                     let (read, write) = stream.split();
-                    (box read, box write)
+                    (Box::new(read), Box::new(write))
                 }
                 _ => return,
             },
             // Split the unencrypted TCP stream.
             _ => {
                 let (read, write) = stream.split();
-                (box read, box write)
+                (Box::new(read), Box::new(write))
             }
         };
 
