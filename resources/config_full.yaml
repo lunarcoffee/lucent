@@ -1,4 +1,4 @@
-address: '127.0.0.1:1440'
+address: '0.0.0.0:443'
 
 file_root: 'resources/www'
 template_root: 'resources/templates'
@@ -12,10 +12,11 @@ dir_listing:
 
 routing_table:
   '@/': '/index.html'
-  '@/cgi': '/files/hello_cgi.py'
+  '@/about': '/about.html'
 
-  '@/{image_name:[a-zA-Z]+}/img': '/files/images/[image_name].jpg'
-  '@/prime/{number:[0-9]\{3\}}': '/files/prime_cgi.py?n=[number]'
+  '@/{image_name}/img': '/files/images/[image_name].jpg'
+
+  '@/is_prime/{number:[0-9]{3\}}': '/files/prime_cgi.py?n=[number]'
 
   '@/pdfs/{pdf_name:\\w+}': '/files/pdfs/[pdf_name].pdf'
   '/pdfs': '/files/pdfs'
@@ -23,15 +24,21 @@ routing_table:
 cgi_executors:
   py: 'python3'
   pl: 'perl'
+  sh: '/usr/bin/bash'
 
 basic_auth:
-  secret:
+  secret_realm:
     credentials:
       - 'user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
       - 'user2:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
     routes:
       - '@/files/secrets.html'
       - '/files/restricted'
+  club_realm:
+    credentials:
+      - 'supersecretuser:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
+    routes:
+      - '/the_club'
 
 tls:
   cert_path: 'resources/cert.pem'
