@@ -30,7 +30,7 @@ basic_auth:
   secret_realm:
     credentials:
       - 'user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
-      - 'user2:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
+      - 'user2:$2a$10$v4hJszPeQhDm.4ncPEkpm.QCvckw.cs3rKQNNjdwCNLYeIixU2ALK'
     routes:
       - '@/files/secrets.html'
       - '/files/restricted'

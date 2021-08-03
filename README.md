@@ -6,7 +6,7 @@ lucent is a lightweight web server, with a mostly RFC-compliant implementation o
 - CGI/NPH scripting support
 - Generated directory listings
 - HTTPS (with [rustls](https://github.com/ctz/rustls))
-- HTTP basic authentication
+- HTTP Basic authentication
 
 It should be quick and easy to spin up an instance; see the [usage](#usage) section.
 
@@ -32,7 +32,7 @@ cargo +nightly build --release
 ## Usage
 
 To start lucent, we need the binary, a [config file](#configuration), and some [templates](#templates) used to dynamically generate special pages
-(status pages and directory listings). Default templates are provided in `/resources/templates`.
+(their location is specified in the config).
 
 ```shell
 lucent config.yaml
@@ -60,7 +60,7 @@ template_root: 'resources/templates'
 
 Directories are relative to the binary's working directory, not the config file's location.
 
-### Directory listing options
+### Directory listing
 
 lucent can generate directory listings in response to requests targeting a directory. This uses the `dir_listing.html`
 template in the template directory.
@@ -116,9 +116,10 @@ The replacer is a path which replaces the part of the target matched by the matc
 With that, here's a brief explanation of each rule in the previous example:
 
 - `'@/': '/index.html'`
-    - This rewrites the exact URL `/` into `/index.html`, so that a user going to `/` will see the content of `/index.html`
+    - This rewrites the exact URL `/` into `/index.html`
+    - A user going to `/` will see the content of `/index.html`
 - `'@/about': '/about.html'`
-    - This rewrites the exact URL `/about` into `/about.html`, same deal
+    - This rewrites the exact URL `/about` into `/about.html`, same deal as above
 - `'@/{image_name}/jpg': '/new_files/[image_name].jpg'`
     - `image_name` is a variable that matches any value in that position in the path
     - A request for `/cat/jpg` would yield the resource at `/new_files/cat.jpg`
@@ -148,9 +149,78 @@ This executes scripts with a `.py` extension using `python3`, those with a `.pl`
 
 ### Basic authentication
 
+lucent can guard the access of resources using HTTP Basic authentication. Needless to say, it would be unwise to use this without [HTTPS](#https). Configuration is done in the `basic_auth` dictionary; here's a full example:
 
+```yaml
+basic_auth:
+  secret:
+    credentials:
+      - 'user1:$2b$08$v3DJthbkT6UlAkh9/U6MvOkiTO.iAhGsTHObky2MfadqWlsWX5sIe'
+      - 'user2:$2a$10$v4hJszPeQhDm.4ncPEkpm.QCvckw.cs3rKQNNjdwCNLYeIixU2ALK'
+    routes:
+      - '@/files/secrets.html'
+      - '/files/restricted'
+  other_realm:
+    # ...
+```
+
+This dictionary maps realm names to the sets of credentials which allow access to them, and the routes that are part of them.
+
+The credentials are stored in a list, and are strings which contain a username and bcrypt password hash, separated by a colon (`username:password_hash`).
+
+The realm's routes are also stored in a list, and are the same as the [matchers](#url-rewriting) used in URL rewriting. Any request with a target matching one of these routes will require authentication with one of the listed sets of credentials to access.
+
+In this example, there are two realms, `secret` and `other_realm`. Within `secret`, there are two sets of credentials that will successfully authenticate a user. The two routes specified mean that authentication is only required for requests matching one of those routes.
 
 ### HTTPS
 
+By default, lucent communicates with HTTP over TCP with no encryption or added security. However, TLS can be enabled by specifying the optional `tls` dictionary (with required values):
+
+```yaml
+tls:
+  cert_path: 'resources/cert.pem'
+  key_path: 'resources/key.pem'
+```
+
+This is the only optional field in the config, and contains the paths to the TLS certificates and private key files to be used. Note that if TLS is enabled, lucent will no longer serve regular HTTP requests without TLS.
+
+Also, paths are relative to the binary's working directory, not the config file's location.
+
 ## Templates
 
+lucent will use HTML templates to generate certain pages:
+
+- `error.html` for status pages (user-friendly pages for some response statuses, including 404, 500, etc.)
+- `dir_listing.html` for [directory listings](#directory-listing-options)
+
+These are written in a simple custom templating language. Default templates can be found in `/resources/templates`, but they can be customized.
+
+### Syntax
+
+The custom templating language is pretty barebones. It adds two things onto regular HTML: single-value placeholders and for loop-like placeholders.
+
+Single-value placeholders are declared by putting a name in brackets (`[name]`). When generating the page, lucent will replace any placeholders with the value of the variable with the placeholder's name.
+
+For example, the default `error.html` template uses the `[status]` placeholder twice:
+
+```html
+<title>Error: [status]</title>
+<h1>[status]</h1>
+```
+
+When evaluating the template, lucent will replace those placeholders with the actual status code of the response.
+
+For loop-like placeholders are declared with an asterisk (`*`), a name, and a nested HTML template within square brackets (i.e. `*name[template]`). The name should correspond with the name of a variable holding multiple values, like a list. When generating the page, lucent will iterate through each value, evaluating the given template for each variable. The resulting snippets of HTML are concatenated to form the placeholder's value.
+
+For example, see the default `dir_listing.html` template (slightly modified here):
+
+```html
+*entries[
+<tr>
+  <td><a href="/[path]">[name]</a></td>
+  <td>[last_modified]</td>
+  <td>[size]</td>
+</tr>]
+```
+
+`entries` is the name of the list containing the contents of the directory. Each of those has an associated `path`, `name`, `last_modified`, and `size`. lucent will evaluate the inner template for each item in `entries`, and use that as the value of the entire placeholder.
