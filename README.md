@@ -40,7 +40,7 @@ lucent config.yaml
 
 ## Configuration
 
-Configuring lucent is done with a config file, which is written in YAML. Example config files are provided in `/resources`:
+Configuring lucent is done with a config file written in YAML. Example config files are provided in `/resources`:
 
 - `config_min.yaml` is pretty much the minimum required info and functions essentially as a static HTTP file server
 - `config_full.yaml` provides more detailed examples for all the fields
@@ -191,7 +191,7 @@ Also, paths are relative to the binary's working directory, not the config file'
 lucent will use HTML templates to generate certain pages:
 
 - `error.html` for status pages (user-friendly pages for some response statuses, including 404, 500, etc.)
-- `dir_listing.html` for [directory listings](#directory-listing-options)
+- `dir_listing.html` for [directory listings](#directory-listing)
 
 These are written in a simple custom templating language. Default templates can be found in `/resources/templates`, but they can be customized.
 
