@@ -3,6 +3,11 @@
 <head>
 	<meta charset="utf-8">
 	<title>Index of [dir]</title>
+	<style>
+		td { text-align: right; min-width: 200px; }
+		td:first-of-type { text-align: left; word-break: break-all; min-width: 300px; }
+		td:last-of-type { min-width: 150px; }
+	</style>
 </head>
 <body>
 	<h1>Index of [dir]</h1><br>
@@ -13,13 +18,12 @@
 			<th style="text-align: right;">Size</th>
 		</tr>
 		<tr><th colspan="3"><hr></th></tr>
-		*entries[
-		<tr>
-			<td style="word-break: break-all; min-width: 300px;"><a href="/[path]">[name]</a>[symlink]</td>
-			<td style="text-align: right; min-width: 200px; vertical-align: top;">[last_modified]</td>
-			<td style="text-align: right; min-width: 150px; vertical-align: top;">[size]</td>
-		</tr>]
-		<tr><th colspan="3"><hr></th></tr>
+		*entries[<tr>
+			<td><a href="/[path]">[name]</a>[symlink]</td>
+			<td>[last_modified]</td>
+			<td>[size]</td>
+		</tr>
+		]<tr><th colspan="3"><hr></th></tr>
 	</table>
 	<p>[custom_message]</p>
 </body>

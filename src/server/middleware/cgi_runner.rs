@@ -1,18 +1,14 @@
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::{io::Write, process::{Command, Stdio}};
 
-use async_std::io;
-use async_std::path::Path;
-use async_std::process::Output;
+use async_std::{io, path::Path, process::Output};
 
-use crate::{consts, log, util};
-use crate::http::message::{Body, Message};
-use crate::http::request::{HttpVersion, Request};
-use crate::http::response::{Response, Status};
-use crate::http::uri::{Query, Uri};
-use crate::server::config::Config;
-use crate::server::file_server::ConnInfo;
-use crate::server::middleware::{MiddlewareOutput, MiddlewareResult};
+use crate::{
+    consts,
+    http::{message::{Body, Message}, request::{HttpVersion, Request}, response::{Response, Status}, uri::{Query, Uri}},
+    log,
+    server::{config::Config, file_server::ConnInfo, middleware::{MiddlewareOutput, MiddlewareResult}},
+    util,
+};
 
 // Headers in a request which are not passed to a CGI script's environment.
 pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_CONTENT_TYPE, consts::H_CONNECTION];

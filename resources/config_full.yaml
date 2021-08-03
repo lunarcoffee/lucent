@@ -15,7 +15,6 @@ routing_table:
   '@/about': '/about.html'
 
   '@/{image_name}/img': '/files/images/[image_name].jpg'
-
   '@/is_prime/{number:[0-9]{3\}}': '/files/prime_cgi.py?n=[number]'
 
   '@/pdfs/{pdf_name:\\w+}': '/files/pdfs/[pdf_name].pdf'
