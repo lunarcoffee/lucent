@@ -191,7 +191,7 @@ Also, paths are relative to the binary's working directory, not the config file'
 lucent will use HTML templates to generate certain pages:
 
 - `error.html` for status pages (user-friendly pages for some response statuses, including 404, 500, etc.)
-- `dir_listing.html` for [directory listings](#directory-listing-options)
+- `dir_listing.html` for [directory listings](#directory-listing)
 
 These are written in a simple custom templating language. Default templates can be found in `/resources/templates`, but they can be customized.
 
