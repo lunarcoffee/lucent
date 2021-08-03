@@ -1,6 +1,6 @@
 # lucent
 
-lucent is a lightweight web server, with a mostly RFC-compliant implementation of HTTP/1.1 written from scratch (as a fun exercise). Major features include:
+lucent is a lightweight web server, with a mostly RFC-compliant implementation of HTTP/1.1 written from scratch (as a fun exercise). As a result, you probably don't want to use this for anything important. Anyhow, major features include:
 
 - URL rewriting
 - CGI/NPH scripting support
