@@ -219,12 +219,11 @@ impl<'a> ResponseGenerator<'a> {
     // Rewrite the given URL (`raw_target`) using the configured routing table. If no rule in the table matches the
     // URL, `None` is returned.
     fn rewrite_url(config: &Config, raw_target: &str) -> Option<String> {
-        // Search the routing table for a matching `RouteSpec`.
         for (RouteSpec(rule_regex), RouteReplacement(replacement)) in &config.routing_table {
-            // Test if the `RouteSpec` matches; if it does, the captures should correspond to the path variables.
+            // Rewrite with the first matching `RouteSpec`; regex captures correspond to the path variables.
             if let Some(capture) = rule_regex.captures(raw_target) {
                 // Create the `SubstitutionMap` for rewriting this URL. Start by going over the regex's captures and
-                // their corresponding placeholder names/
+                // their corresponding placeholder names.
                 let sub = capture.iter().zip(rule_regex.capture_names())
                     // Skip the first one; that capture has the entire match.
                     .skip(1)
