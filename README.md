@@ -31,19 +31,20 @@ cargo +nightly build --release
 
 ## Usage
 
-To start lucent, we need the binary, a [config file](#configuration), and some [templates](#templates) used to dynamically generate special pages
+To start lucent, all that's required is the binary, a [config file](#configuration), and some [templates](#templates) used to dynamically generate special pages
 (their location is specified in the config).
 
+Just pass in the path to the config file:
 ```shell
-lucent config.yaml
+lucent path/to/config.yaml
 ```
 
 ## Configuration
 
 Configuring lucent is done with a config file written in YAML. Example config files are provided in `/resources`:
 
-- `config_min.yaml` is pretty much the minimum required info and functions essentially as a static HTTP file server
-- `config_full.yaml` provides more detailed examples for all the fields
+- `config_min.yaml` contains pretty much the minimum required amount of info, functioning essentially as a static HTTP file server
+- `config_full.yaml` provides more detailed examples for all configuration options
 
 All the options mentioned in the following sections are required, unless otherwise indicated.
 
@@ -125,7 +126,7 @@ With that, here's a brief explanation of each rule in the previous example:
     - A request for `/cat/jpg` would yield the resource at `/new_files/cat.jpg`
 - `'@/is_prime/{number:[0-9]{3\}}': '/files/prime_cgi.py?n=[number]'`
     - `number` only matches 3-digit numbers; values that match `[0-9]{3}` (note the escaping of `}`)
-    - This actually passes the number to a CGI script
+    - This passes the number to a CGI script as a query parameter
     - A request for `/is_prime/1000` would not match, and result in a 404
 - `'/files_old': '/backup/old'`
     - This rewrites any URL starting with `/files_old` to start with `/backup/old`
@@ -195,11 +196,11 @@ lucent will use HTML templates to generate certain pages:
 - `error.html` for status pages (user-friendly pages for some response statuses, including 404, 500, etc.)
 - `dir_listing.html` for [directory listings](#directory-listing)
 
-These are written in a simple custom templating language. Default templates can be found in `/resources/templates`, but they can be customized.
+These are written in a simple custom templating language. Fully functional default templates can be found in `/resources/templates`, but they can be customized.
 
 ### Syntax
 
-The custom templating language is pretty barebones. It adds two things onto regular HTML: single-value placeholders and for loop-like placeholders.
+The custom templating language is pretty barebones. It adds two things onto regular HTML: single-value placeholders and collection placeholders.
 
 Single-value placeholders are declared by putting a name in brackets (`[name]`). When generating the page, lucent will replace any placeholders with the value of the variable with the placeholder's name.
 
@@ -212,7 +213,7 @@ For example, the default `error.html` template uses the `[status]` placeholder t
 
 When evaluating the template, lucent will replace those placeholders with the actual status code of the response.
 
-For loop-like placeholders are declared with an asterisk (`*`), a name, and a nested HTML template within square brackets (i.e. `*name[template]`). The name should correspond with the name of a variable holding multiple values, like a list. When generating the page, lucent will iterate through each value, evaluating the given template for each variable. The resulting snippets of HTML are concatenated to form the placeholder's value.
+Collection placeholders are declared with an asterisk (`*`), a name, and a nested HTML template within square brackets (i.e. `*name[template]`). The name should correspond with the name of a variable holding multiple values (a collection), like a list. When generating the page, lucent will iterate through each value, evaluating the given template for each variable. The resulting snippets of HTML are concatenated to form the placeholder's value.
 
 For example, see the default `dir_listing.html` template (slightly modified here):
 
@@ -225,4 +226,4 @@ For example, see the default `dir_listing.html` template (slightly modified here
 </tr>]
 ```
 
-`entries` is the name of the list containing the contents of the directory. Each of those has an associated `path`, `name`, `last_modified`, and `size`. lucent will evaluate the inner template for each item in `entries`, and use that as the value of the entire placeholder.
+`entries` is the name of the list containing the contents of the directory. Each of those has an associated `path`, `name`, `last_modified`, and `size`. lucent will evaluate the inner template for each item in `entries`, join them together, and use that as the value of the placeholder.
