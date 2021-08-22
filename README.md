@@ -1,4 +1,9 @@
-# lucent
+![img](https://i.imgur.com/dtrnFHf.png)
+
+![Version 1.3.3](https://img.shields.io/badge/version-1.3.3-orange.svg)
+![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
+
+---
 
 lucent is a lightweight web server, with a mostly RFC-compliant implementation of HTTP/1.1 written from scratch (as a fun exercise). Major features include:
 
