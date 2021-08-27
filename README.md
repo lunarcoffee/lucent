@@ -1,6 +1,6 @@
 ![img](https://i.imgur.com/dtrnFHf.png)
 
-![Version 1.3.3](https://img.shields.io/badge/version-1.3.3-orange.svg?style=flat-square)
+![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-orange.svg?style=flat-square)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)
 
 ---
@@ -12,6 +12,7 @@ lucent is a lightweight web server, with a mostly RFC-compliant implementation o
 - Generated directory listings
 - HTTPS (with [rustls](https://github.com/ctz/rustls))
 - HTTP Basic authentication
+- Virtual hosting
 
 It should be quick and easy to spin up an instance; see the [usage](#usage) section.
 
@@ -44,9 +45,11 @@ Just pass in the path to the config file:
 lucent path/to/config.yaml
 ```
 
+[Virtual hosting](#virtual-hosting) can be done using multiple config files; just pass in all of their paths. The order they are passed in can be important.
+
 ## Configuration
 
-Configuring lucent is done with a config file written in YAML. Example config files are provided in `/resources`:
+Configuring lucent is done with config files written in YAML. Example config files are provided in `/resources`:
 
 - `config_min.yaml` contains pretty much the minimum required amount of info, functioning essentially as a static HTTP file server
 - `config_full.yaml` provides more detailed examples for all configuration options
@@ -55,10 +58,13 @@ All the options mentioned in the following sections are required, unless otherwi
 
 ### Basic configuration
 
-The address and port to host the server on are specified as a string, `address`. The directory to serve files from is specified in `file_root`, and the directory with the required templates is specified in `template_root`.
+The address and port to host the server on are specified as a string, `address`. The hostnames (values of the `Host` header) to serve are specified in `host`; to serve for all hostnames, the list should contain `'*'`.
+
+The directory to serve files from is specified in `file_root`, and the directory with the required templates is specified in `template_root`.
 
 ```yaml
 address: '0.0.0.0:80'
+hosts: ['example.com', 'www.example.com']
 
 file_root: 'resources/www'
 template_root: 'resources/templates'
@@ -193,6 +199,22 @@ tls:
 This is the only optional field in the config, and contains the paths to the TLS certificates and private key files to be used. Note that if TLS is enabled, lucent will no longer serve regular HTTP requests without TLS.
 
 Also, paths are relative to the binary's working directory, not the config file's location.
+
+### Virtual hosting
+
+Name-based virtual hosting can be done by specifying multiple config files with different `hosts` values. Most configuration options are host-specific, but the following are not (their value will be taken from the first config passed in from the command line):
+
+- `address` 
+  - Only one address can be listened on
+- `tls`
+  - Only one certificate can be used (a SAN or wildcard certificate may be helpful)
+  - This also means that the hosts must be all HTTP-based or all HTTPS-based
+  
+The order the config paths is important, as the `Host` header matching process goes over the configs in the order they were passed in. For example:
+```shell
+lucent wildcard.yaml other.yaml
+```
+If `wildcard.yaml` specifies `hosts: ['*']`, the configuration options in `other.yaml` will never be used, as all requests' `Host` headers will match `wildcard.yaml`, which was passed in first.
 
 ## Templates
 
