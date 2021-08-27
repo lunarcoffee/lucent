@@ -95,13 +95,14 @@ impl<'a> ResponseGenerator<'a> {
 
         // Log the request. Show the original and routed targets if URL rewriting occurred, and also show whether basic
         // authentication was used.
+        let host = self.request.headers.get_host().unwrap();
         let reroute = if self.raw_target != self.routed_target {
             format!(" -> {}", self.routed_target)
         } else {
             String::new()
         };
         let auth = if required_auth { " (basic auth)" } else { "" };
-        log::info(format!("({}) {} {}{}{}", response.status, &self.request.method, &self.raw_target, reroute, auth));
+        log::req(response.status, self.request.method, &self.raw_target, &(reroute + auth), host);
 
         // Return the response in a `MiddlewareOutput`; this will be sent by an `OutputProcessor`.
         Err(MiddlewareOutput::Response(response, false))

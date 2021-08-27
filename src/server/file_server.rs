@@ -189,8 +189,8 @@ impl FileServer {
             Err(output) => OutputProcessor::new(&mut writer, &Templates::new_empty(), None).process(output).await,
             Ok(mut request) => {
                 // Determine the config to use for this request based on the 'Host' header.
-                let hostname = &request.headers.get(consts::H_HOST).unwrap()[0];
-                let virtual_server = configs.iter().find(|c| c.0.hosts.iter().any(|h| h == "*" || h == hostname));
+                let hostname = &request.headers.get_host().unwrap();
+                let virtual_server = configs.iter().find(|c| c.0.hosts.iter().any(|h| h == "*" || &h == hostname));
 
                 match virtual_server {
                     Some(VirtualServerInfo(config, templates)) => {

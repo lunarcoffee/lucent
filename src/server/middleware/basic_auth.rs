@@ -76,7 +76,8 @@ impl<'a> BasicAuthChecker<'a> {
 
     // Generates an authentication challenge.
     fn www_authenticate_output(&self, realm: &str) -> MiddlewareResult<bool> {
-        log::info(format!("({}) {} {}", Status::Unauthorized, self.request.method, self.request.uri));
+        let host = self.request.headers.get_host().unwrap();
+        log::req(Status::Unauthorized, self.request.method, &self.request.uri, "", &host);
 
         let auth = format!("{} {}=\"{}\"", consts::H_AUTH_BASIC, consts::H_AUTH_REALM, realm);
         let response = MessageBuilder::<Response>::new()

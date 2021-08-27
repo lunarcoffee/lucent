@@ -1,6 +1,6 @@
 use std::{fmt::Display, process};
 
-use crate::util;
+use crate::{util, http::request::Method};
 
 // Logs a message and exits with an unsuccessful error code.
 pub fn fatal(msg: impl Display) -> ! {
@@ -18,4 +18,8 @@ pub fn info(msg: impl Display) {
 
 fn get_time_now_formatted() -> impl Display {
     util::get_time_local().format("%d/%m/%Y %T")
+}
+
+pub fn req(status: impl Display, method: Method, target: impl Display, target_suffix: &str, host: &str) {
+    info(format!("({}) {} {}{} ({})", status, method, target, target_suffix, host));
 }

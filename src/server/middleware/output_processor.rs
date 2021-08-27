@@ -92,7 +92,10 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         };
 
         match self.request {
-            Some(request) => log::info(format!("({}) {} {}", status, request.method, request.uri)),
+            Some(request) => {
+                let host = request.headers.get_host().unwrap();
+                log::req(status, request.method, &request.uri, "", host);
+            }
             _ => log::info(format!("({})", status)),
         }
     }

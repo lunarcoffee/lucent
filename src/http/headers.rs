@@ -24,6 +24,10 @@ impl Headers {
         self.headers.get(&Self::normalize_header_name(name))
     }
 
+    pub fn get_host(&self) -> Option<&String> {
+        self.get(consts::H_HOST).map(|h| h.into_iter().next().unwrap())
+    }
+
     pub fn get_all(&self) -> &HeaderMap {
         &self.headers
     }

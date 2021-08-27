@@ -63,7 +63,8 @@ impl<'a> CgiRunner<'a> {
                     // Validate the response, and respond or error out.
                     match Response::new(&mut res.as_slice(), &mut io::sink()).await {
                         Ok(response) => {
-                            log::info(format!("({}) {} {}", Status::Ok, self.request.method, self.request.uri));
+                            let host = self.request.headers.get_host().unwrap();
+                            log::req(Status::Ok, self.request.method, &self.request.uri, "", &host);
                             return Err(MiddlewareOutput::Response(response, false));
                         }
                         _ => log::warn(format!("invalid response returned by CGI script `{}`", self.script_path)),
