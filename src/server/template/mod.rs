@@ -52,6 +52,10 @@ impl Template {
         TemplateParser::new(file).parse()
     }
 
+    pub fn new_empty() -> Self {
+        Template { parts: vec![] }
+    }
+
     // Attempts to substitute values from `placeholders` into this template.
     pub fn substitute(&self, placeholders: &SubstitutionMap) -> Option<String> {
         let mut output = String::new();

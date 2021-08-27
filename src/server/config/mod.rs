@@ -74,7 +74,7 @@ pub struct TlsConfig {
 
 impl Config {
     // Attempt to load a config from the file at the given path.
-    pub async fn load(path: &str) -> Option<Self> {
+    pub async fn load(path: String) -> Option<Self> {
         serde_yaml::from_str::<Config>(&fs::read_to_string(path).await.ok()?).ok()
     }
 }

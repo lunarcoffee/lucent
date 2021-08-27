@@ -48,11 +48,12 @@ pub enum FileServerStartError {
     TlsInvalidKey,
 }
 
+struct VirtualServerInfo(Config, Templates);
+
 // Static file server with some extra capabilities.
 pub struct FileServer {
-    // Configuration options and templates for special pages.
-    config: Config,
-    templates: Templates,
+    // Configuration options and templates for each virtual server.
+    configs: Arc<Vec<VirtualServerInfo>>,
 
     // Listener for client connections and TLS connection manager.
     listener: TcpListener,
@@ -65,19 +66,28 @@ pub struct FileServer {
 }
 
 impl FileServer {
-    pub async fn new(config: Config) -> Result<Self, FileServerStartError> {
-        // Verify that the static file directory is a directory.
-        let file_root = config.file_root.strip_suffix('/').unwrap_or(&config.file_root).to_string();
-        if !Path::new(&file_root).is_dir().await {
-            return Err(FileServerStartError::InvalidFileRoot);
-        }
+    pub async fn new(configs: Vec<Config>) -> Result<Self, FileServerStartError> {
+        let config_loading_futures = configs.into_iter().map(|config| async {
+            // Verify that the static file directory is a directory.
+            let file_root = config.file_root.strip_suffix('/').unwrap_or(&config.file_root).to_string();
+            if !Path::new(&file_root).is_dir().await {
+                return Err(FileServerStartError::InvalidFileRoot);
+            }
 
-        // Compile and verify templates.
-        let templates = Templates::new(config.template_root.strip_suffix('/').unwrap_or(&config.template_root)).await
-            .ok_or(FileServerStartError::InvalidTemplates)?;
+            // Compile and verify templates.
+            let trimmed_template_root = config.template_root.strip_suffix('/').unwrap_or(&config.template_root);
+            let templates = Templates::new(trimmed_template_root).await.ok_or(FileServerStartError::InvalidTemplates)?;
+
+            Ok(VirtualServerInfo(config, templates))
+        });
+
+        // Load the configs concurrently.
+        let virtual_configs = futures::future::join_all(config_loading_futures).await.into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        let virtual_configs = Arc::new(virtual_configs);
 
         let (stop_sender, stop_receiver) = channel::bounded(1);
-        let listener = match TcpListener::bind(&config.address).await {
+        let listener = match TcpListener::bind(&virtual_configs[0].0.address).await {
             Ok(listener) => listener,
             Err(e) => return Err(match e.kind() {
                 ErrorKind::AddrInUse => FileServerStartError::AddressInUse,
@@ -86,7 +96,7 @@ impl FileServer {
             }),
         };
 
-        let tls_acceptor = match &config.tls {
+        let tls_acceptor = match &virtual_configs[0].0.tls {
             // If a TLS section is included in the config, enable TLS.
             Some(tls) => {
                 // Load and verify the certificate(s).
@@ -114,7 +124,7 @@ impl FileServer {
             _ => None,
         };
 
-        Ok(FileServer { config, templates, listener, tls_acceptor, stop_sender, stop_receiver })
+        Ok(FileServer { configs: virtual_configs, listener, tls_acceptor, stop_sender, stop_receiver })
     }
 
     // Continuously monitor for and accept client connections until a stop signal is given.
@@ -131,9 +141,8 @@ impl FileServer {
                     Some(Ok(stream)) => {
                         // Spawn a new task to handle the client.
                         let tls_acceptor = self.tls_acceptor.clone();
-                        let config = self.config.clone();
-                        let templates = self.templates.clone();
-                        task::spawn(Self::handle_conn(stream, tls_acceptor, config, templates));
+                        let configs = self.configs.clone();
+                        task::spawn(Self::handle_conn(stream, tls_acceptor, configs));
                     }
                     _ => break,
                 }
@@ -144,7 +153,7 @@ impl FileServer {
     }
 
     // Handles an incoming connection, optionally with TLS. This can serve many requests, using HTTP keep-alive.
-    async fn handle_conn(stream: TcpStream, tls_acceptor: Option<TlsAcceptor>, config: Config, templates: Templates) {
+    async fn handle_conn(stream: TcpStream, tls_acceptor: Option<TlsAcceptor>, configs: Arc<Vec<VirtualServerInfo>>) {
         // Gather info, mostly for logging.
         let remote_addr = stream.peer_addr().unwrap_or(SocketAddr::from_str("0.0.0.0:80").unwrap());
         let local_addr = stream.local_addr().unwrap_or(SocketAddr::from_str("127.0.0.1:80").unwrap());
@@ -177,18 +186,29 @@ impl FileServer {
         // invalid request. Note that this match expression is the loop condition, not the body.
         while !match RequestVerifier::new(&mut reader, &mut writer).verify_request().await {
             // Invalid request; this will respond appropriately and always return true (terminate the loop).
-            Err(output) => OutputProcessor::new(&mut writer, &templates, None).process(output).await,
+            Err(output) => OutputProcessor::new(&mut writer, &Templates::new_empty(), None).process(output).await,
             Ok(mut request) => {
-                // Generate a response for the request.
-                let res = ResponseGenerator::new(&config, &templates, &mut request, &conn_info).get_response().await;
+                // Determine the config to use for this request based on the 'Host' header.
+                let hostname = &request.headers.get(consts::H_HOST).unwrap()[0];
+                let virtual_server = configs.iter().find(|c| c.0.hosts.iter().any(|h| h == "*" || h == hostname));
 
-                Self::client_intends_to_close(&request) || match res {
-                    // An `Err` here means a response was generated (see `MiddlewareOutput`).
-                    Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
-                        .process(output)
-                        .await,
-                    // If a response failed to generate, terminate the loop.
-                    _ => true,
+                match virtual_server {
+                    Some(VirtualServerInfo(config, templates)) => {
+                        // Generate a response for the request.
+                        let res = ResponseGenerator::new(&config, &templates, &mut request, &conn_info)
+                            .get_response().await;
+
+                        Self::client_intends_to_close(&request) || match res {
+                            // An `Err` here means a response was generated (see `MiddlewareOutput`).
+                            Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
+                                .process(output)
+                                .await,
+                            // If a response failed to generate, terminate the loop.
+                            _ => true,
+                        }
+                    }
+                    // No config handling the request's hostname was found.
+                    _ => false,
                 }
             }
         } {}

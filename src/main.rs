@@ -16,18 +16,22 @@ mod util;
 
 #[async_std::main]
 async fn main() {
-    // The only argument taken is mandatory, the path to the config file.
+    // The arguments taken are the paths to the config files (at least one is required).
     let mut args = env::args();
-    if args.len() != 2 {
-        println!("usage: {} <config path>", args.next().unwrap());
+    if args.len() < 2 {
+        println!("usage: {} <config paths...>", args.next().unwrap());
         process::exit(1);
     }
 
     log::info(format!("lucent v{}", consts::SERVER_VERSION));
-    let config = Config::load(&args.nth(1).unwrap()).await
-        .unwrap_or_else(|| log::fatal("configuration file invalid or missing required options"));
 
-    log::fatal(match FileServer::new(config).await {
+    // Load all configs concurrently, stopping if any fail to be loaded.
+    let config_futures = args.skip(1).into_iter().map(|path| Config::load(path));
+    let configs = futures::future::join_all(config_futures).await.into_iter()
+        .collect::<Option<_>>()
+        .unwrap_or_else(|| log::fatal("a configuration file was invalid or omitted required options"));
+
+    log::fatal(match FileServer::new(configs).await {
         // Register a signal handler for graceful shutdowns and start the server.
         Ok(server) => {
             let server = Arc::new(server);
