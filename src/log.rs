@@ -20,6 +20,7 @@ fn get_time_now_formatted() -> impl Display {
     util::get_time_local().format("%d/%m/%Y %T")
 }
 
+// Logs details about a request.
 pub fn req(status: impl Display, method: Method, target: impl Display, target_suffix: &str, host: &str) {
     info(format!("({}) {} {}{} ({})", status, method, target, target_suffix, host));
 }
