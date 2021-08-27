@@ -9,15 +9,19 @@ use crate::server::config::{realm_info::RealmInfo, route_replacement::RouteRepla
 // Basic authentication structs and serde `Deserialize` implementations.
 pub mod realm_info;
 
-// Same stuff, but for URL rewriting.
+// Same stuff as above, but for URL rewriting.
 pub mod route_spec;
 pub mod route_replacement;
 
-// Options from the config file (see '/resources/config.yaml').
+// Options from the config file (see '/resources/config_*.yaml').
 #[derive(Clone, Deserialize)]
 pub struct Config {
     // The address on which to host the server.
     pub address: String,
+
+    // Only requests with 'Host' header values in this list will be processed with these configuration options. A list
+    // containing '*' will act as a catch-all.
+    pub hosts: Vec<String>,
 
     // The directory containing the files to serve.
     pub file_root: String,

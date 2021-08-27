@@ -1,4 +1,5 @@
 address: '0.0.0.0:443'
+hosts: ['sample.com', 'www.sample.com', 'other-host.org']
 
 file_root: 'resources/www'
 template_root: 'resources/templates'
