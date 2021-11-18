@@ -1,12 +1,12 @@
 use std::fmt::{self, Display, Formatter};
 
-use async_std::io::{self, BufReader, BufWriter, prelude::Read, Write};
+use async_std::io::{self, prelude::Read, BufReader, BufWriter, Write};
 use num_enum::TryFromPrimitive;
 
 use crate::http::{
     headers::Headers,
     message::{self, Body, Message},
-    parser::{MessageParser, MessageParseResult},
+    parser::{MessageParseResult, MessageParser},
     request::HttpVersion,
 };
 
@@ -76,9 +76,7 @@ pub enum Status {
 }
 
 impl Display for Status {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", *self as i32)
-    }
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result { write!(f, "{}", *self as i32) }
 }
 
 // An HTTP response.
@@ -97,33 +95,21 @@ impl Response {
     }
 
     // Attempts to write this response to the given `writer`.
-    pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> {
-        message::send(writer, self).await
-    }
+    pub async fn send(self, writer: &mut (impl Write + Unpin)) -> io::Result<()> { message::send(writer, self).await }
 }
 
 impl Message for Response {
-    fn get_headers_mut(&mut self) -> &mut Headers {
-        &mut self.headers
-    }
+    fn get_headers_mut(&mut self) -> &mut Headers { &mut self.headers }
 
-    fn get_body_mut(&mut self) -> &mut Option<Body> {
-        &mut self.body
-    }
+    fn get_body_mut(&mut self) -> &mut Option<Body> { &mut self.body }
 
-    fn into_body(self) -> Option<Body> {
-        self.body
-    }
+    fn into_body(self) -> Option<Body> { self.body }
 
     fn to_bytes_no_body(&self) -> Vec<u8> {
         format!("{} {}\r\n{:?}\r\n\r\n", self.http_version, self.status, self.headers).into_bytes()
     }
 
-    fn is_chunked(&self) -> bool {
-        self.chunked
-    }
+    fn is_chunked(&self) -> bool { self.chunked }
 
-    fn set_chunked(&mut self) {
-        self.chunked = true;
-    }
+    fn set_chunked(&mut self) { self.chunked = true; }
 }

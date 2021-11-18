@@ -1,10 +1,19 @@
 use std::collections::HashMap;
 
-use async_std::{fs::File, io::{self, prelude::WriteExt, Write}, task};
+use async_std::{
+    fs::File,
+    io::{self, prelude::WriteExt, Write},
+    task,
+};
 
 use crate::{
     consts,
-    http::{headers::Headers, request::{HttpVersion, Method, Request}, response::{Response, Status}, uri::Uri},
+    http::{
+        headers::Headers,
+        request::{HttpVersion, Method, Request},
+        response::{Response, Status},
+        uri::Uri,
+    },
     util,
 };
 
@@ -58,22 +67,18 @@ impl MessageBuilder<Request> {
                 headers,
                 body: None,
                 chunked: false,
-            }
+            },
         }
     }
 
-    pub fn _set_method(&mut self, method: Method) {
-        self.message.method = method;
-    }
+    pub fn _set_method(&mut self, method: Method) { self.message.method = method; }
 
     pub fn _with_method(mut self, method: Method) -> Self {
         self._set_method(method);
         self
     }
 
-    pub fn _set_uri(&mut self, uri: Uri) {
-        self.message.uri = uri;
-    }
+    pub fn _set_uri(&mut self, uri: Uri) { self.message.uri = uri; }
 
     pub fn _with_uri(mut self, uri: Uri) -> Self {
         self._set_uri(uri);
@@ -96,7 +101,7 @@ impl MessageBuilder<Response> {
                 headers,
                 body: None,
                 chunked: false,
-            }
+            },
         }
     }
 
@@ -115,18 +120,14 @@ impl MessageBuilder<Response> {
 
 // Many operations are defined for both requests and responses, since they are quite similar in structure.
 impl<M: Message> MessageBuilder<M> {
-    pub fn set_header(&mut self, name: &str, value: &str) {
-        self.message.get_headers_mut().set_one(&name, value);
-    }
+    pub fn set_header(&mut self, name: &str, value: &str) { self.message.get_headers_mut().set_one(&name, value); }
 
     pub fn with_header(mut self, name: &str, value: &str) -> Self {
         self.set_header(name, value);
         self
     }
 
-    pub fn unset_header(&mut self, name: &str) {
-        self.message.get_headers_mut().remove(name);
-    }
+    pub fn unset_header(&mut self, name: &str) { self.message.get_headers_mut().remove(name); }
 
     pub fn without_header(mut self, name: &str) -> Self {
         self.unset_header(name);
@@ -158,9 +159,7 @@ impl<M: Message> MessageBuilder<M> {
         self.with_header(consts::H_CONTENT_TYPE, media_type)
     }
 
-    pub fn build(self) -> M {
-        self.message
-    }
+    pub fn build(self) -> M { self.message }
 }
 
 // This attempts to write an HTTP message to the given `writer`. This can fail if writing a part of the message fails,
@@ -174,8 +173,9 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
         if let Some(body) = message.into_body() {
             // Send the body without blocking, chunking it if desirable.
             match body {
-                Body::Stream(mut file, len) =>
-                    util::with_chunks(len, &mut file, |c| task::block_on(writer.write_all(&c))).await?,
+                Body::Stream(mut file, len) => {
+                    util::with_chunks(len, &mut file, |c| task::block_on(writer.write_all(&c))).await?
+                }
                 Body::Bytes(bytes) => {
                     if chunked {
                         for chunk in bytes.chunks(consts::CHUNK_SIZE) {
@@ -190,9 +190,9 @@ pub async fn send(writer: &mut (impl Write + Unpin), message: impl Message) -> i
             writer.flush().await?;
         }
         Ok(())
-    }).await
+    })
+    .await
 }
-
 
 // Writes a `chunk` (a slice of bytes) to a `writer`.
 async fn write_chunk(writer: &mut (impl Write + Unpin), chunk: &[u8]) -> io::Result<()> {

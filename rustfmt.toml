@@ -1,0 +1,8 @@
+max_width = 120
+single_line_if_else_max_width = 120
+chain_width = 90
+fn_call_width = 120
+fn_single_line = true
+struct_lit_width = 90
+wrap_comments = true
+comment_width = 120

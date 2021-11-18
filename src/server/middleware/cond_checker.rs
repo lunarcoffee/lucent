@@ -15,9 +15,7 @@ pub struct CondInfo {
 }
 
 impl CondInfo {
-    pub fn new(etag: Option<String>, last_modified: Option<DateTime<Utc>>) -> Self {
-        CondInfo { etag, last_modified }
-    }
+    pub fn new(etag: Option<String>, last_modified: Option<DateTime<Utc>>) -> Self { CondInfo { etag, last_modified } }
 }
 
 // Processes a request's conditional headers, if present.
@@ -27,9 +25,7 @@ pub struct ConditionalChecker<'a> {
 }
 
 impl<'a> ConditionalChecker<'a> {
-    pub fn new(info: &'a CondInfo, headers: &'a mut Headers) -> Self {
-        ConditionalChecker { info, headers }
-    }
+    pub fn new(info: &'a CondInfo, headers: &'a mut Headers) -> Self { ConditionalChecker { info, headers } }
 
     pub fn check(&mut self) -> MiddlewareResult<()> {
         if !self.check_unchanged_headers() {
@@ -59,10 +55,7 @@ impl<'a> ConditionalChecker<'a> {
             if let Some(last_modified) = self.info.last_modified {
                 // If the document has not been modified since the client's provided time, they have the latest version
                 // of the resource, so an update should be fine. Ignore invalid values.
-                return match util::parse_time_rfc2616(&since[0]) {
-                    Some(since) => last_modified <= since,
-                    _ => true,
-                };
+                return util::parse_time_rfc2616(&since[0]).map(|t| last_modified <= t).unwrap_or(true);
             }
         }
 
@@ -83,10 +76,7 @@ impl<'a> ConditionalChecker<'a> {
         } else if let Some(since) = self.headers.get(consts::H_IF_MODIFIED_SINCE) {
             if let Some(last_modified) = self.info.last_modified {
                 // If the resource has been modified after the client's specified time, their resource is outdated.
-                return match util::parse_time_rfc2616(&since[0]) {
-                    Some(since) => last_modified > since,
-                    _ => true,
-                };
+                return util::parse_time_rfc2616(&since[0]).map(|t| last_modified > t).unwrap_or(true);
             }
         }
         true

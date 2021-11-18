@@ -1,6 +1,9 @@
 use std::time::{self, Duration};
 
-use async_std::{fs::{self, DirEntry, Metadata}, path::Path};
+use async_std::{
+    fs::{self, DirEntry, Metadata},
+    path::Path,
+};
 use chrono::{TimeZone, Utc};
 use futures::StreamExt;
 
@@ -10,7 +13,7 @@ use crate::{
     server::{
         config::Config,
         middleware::{MiddlewareOutput, MiddlewareResult},
-        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+        template::{templates::Templates, SubstitutionMap, TemplateSubstitution},
     },
 };
 
@@ -30,14 +33,17 @@ impl<'a> DirectoryLister<'a> {
     // Generate the body of a directory listing response.
     pub async fn get_listing_body(&self) -> MiddlewareResult<String> {
         let mut files = match fs::read_dir(self.dir).await {
-            Ok(files) => files
-                .filter_map(|f| async {
-                    // Retrieve the metadata as well; this is used for determining the kind (file, directory, symlink).
-                    let file = f.ok()?;
-                    let metadata = file.metadata().await.ok()?;
-                    Some((file, metadata))
-                })
-                .collect::<Vec<_>>().await,
+            Ok(files) => {
+                files
+                    .filter_map(|f| async {
+                        // Retrieve the metadata too; this is used for determining the kind (file, directory, symlink).
+                        let file = f.ok()?;
+                        let metadata = file.metadata().await.ok()?;
+                        Some((file, metadata))
+                    })
+                    .collect::<Vec<_>>()
+                    .await
+            }
             _ => return Err(MiddlewareOutput::Error(Status::NotFound, false)),
         };
 
@@ -49,7 +55,7 @@ impl<'a> DirectoryLister<'a> {
             Some((file, _)) => fs::read_to_string(file.path()).await?.replace('\n', "<br>"),
             // File not found, but `all_viewable` is true; default to an empty message.
             _ if self.config.dir_listing.all_viewable => String::new(),
-            // File not found and the config option is false, the client may not view this directory.
+            // File not found and the config option is false; the client may not view this directory.
             _ => return Err(MiddlewareOutput::Error(Status::Forbidden, false)),
         };
 
@@ -59,7 +65,8 @@ impl<'a> DirectoryLister<'a> {
 
         // Filter out hidden files (name starts with '.'), unless we are configured to show them. Always hide the
         // '.viewable' file if present, though.
-        let files = files.into_iter()
+        let files = files
+            .into_iter()
             .filter(|(f, _)| {
                 let name = f.file_name().to_string_lossy().to_string();
                 (self.config.dir_listing.show_hidden || !name.starts_with('.')) && name != ".viewable"
@@ -118,10 +125,20 @@ impl<'a> DirectoryLister<'a> {
 
                         let link = format!(" -> {}", linked_file.file_name()?.to_string_lossy())
                             + if is_dir { "/" } else { "" };
-                        if config_show_symlinks { link } else { String::new() }
+                        if config_show_symlinks {
+                            link
+                        } else {
+                            String::new()
+                        }
                     }
                     // Broken symlink.
-                    _ => if config_show_symlinks { " (broken symlink)".to_string() } else { String::new() },
+                    _ => {
+                        if config_show_symlinks {
+                            " (broken symlink)".to_string()
+                        } else {
+                            String::new()
+                        }
+                    }
                 }
             } else {
                 String::new()
@@ -176,7 +193,11 @@ impl<'a> DirectoryLister<'a> {
             let trimmed = number.trim_end_matches('0').to_string();
 
             // Remove any trailing '.' (i.e. '8.00' after trimming is just '8.', so remove the '.').
-            if trimmed.ends_with('.') { trimmed[..trimmed.len() - 1].to_string() } else { trimmed }
+            if trimmed.ends_with('.') {
+                trimmed[..trimmed.len() - 1].to_string()
+            } else {
+                trimmed
+            }
         } else {
             number
         };

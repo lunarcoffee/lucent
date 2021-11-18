@@ -7,12 +7,7 @@ pub struct TemplateParser {
 }
 
 impl TemplateParser {
-    pub fn new(file: String) -> Self {
-        TemplateParser {
-            file,
-            parts: vec![],
-        }
-    }
+    pub fn new(file: String) -> Self { TemplateParser { file, parts: vec![] } }
 
     pub fn parse(self) -> Option<Template> {
         let parts = self.parse_parts()?;
@@ -49,7 +44,8 @@ impl TemplateParser {
                         // If we've hit the end of a placeholder and the depth has gone negative, that means we've
                         // exited the current placeholder, so this is the index of its end.
                         *c == ']' && depth < 0
-                    })? + start_index + 1;
+                    })? + start_index
+                        + 1;
 
                     // Extract the template for the values of this placeholder and try parsing it.
                     let sub_template = chars[start_index + 1..end_index].iter().collect();
@@ -67,9 +63,8 @@ impl TemplateParser {
                 }
                 // Nothing special, extract everything until the next special character.
                 _ => {
-                    let start_of_next_part = chars[pos..].iter()
-                        .position(|c| "[*\\".contains(*c))
-                        .unwrap_or(chars.len() - pos) + pos;
+                    let start_of_next_part =
+                        chars[pos..].iter().position(|c| "[*\\".contains(*c)).unwrap_or(chars.len() - pos) + pos;
                     let text = chars[pos..start_of_next_part].iter().collect();
 
                     // Jump to the next special character.

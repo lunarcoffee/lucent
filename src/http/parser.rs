@@ -1,6 +1,9 @@
 use std::{collections::HashMap, convert::TryFrom, error};
 
-use async_std::{io::{self, BufRead, prelude::BufReadExt, Write}, prelude::Future};
+use async_std::{
+    io::{self, prelude::BufReadExt, BufRead, Write},
+    prelude::Future,
+};
 use futures::AsyncReadExt;
 
 use crate::{
@@ -37,9 +40,7 @@ pub enum MessageParseError {
 }
 
 impl<T: error::Error> From<T> for MessageParseError {
-    fn from(_: T) -> Self {
-        MessageParseError::Unknown
-    }
+    fn from(_: T) -> Self { MessageParseError::Unknown }
 }
 
 pub type MessageParseResult<T> = Result<T, MessageParseError>;
@@ -51,7 +52,7 @@ macro_rules! err_if {
         if $cond {
             return Err(MessageParseError::$err);
         }
-    }
+    };
 }
 
 // This is a parser for an HTTP message, read from `reader`. The only use of `writer` is to send a '100 Continue', if
@@ -62,9 +63,7 @@ pub struct MessageParser<R: BufRead + Unpin, W: Write + Unpin> {
 }
 
 impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
-    pub fn new(reader: R, writer: W) -> Self {
-        MessageParser { reader, writer }
-    }
+    pub fn new(reader: R, writer: W) -> Self { MessageParser { reader, writer } }
 
     // Attempts to parse a request from `self.reader`.
     pub async fn parse_request(&mut self) -> MessageParseResult<Request> {
@@ -72,14 +71,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         let headers = self.parse_headers(true).await?;
         let body = self.parse_body(method, &headers).await?.map(|b| Body::Bytes(b));
 
-        Ok(Request {
-            method,
-            uri,
-            http_version,
-            headers,
-            body,
-            chunked: false,
-        })
+        Ok(Request { method, uri, http_version, headers, body, chunked: false })
     }
 
     // Attempts to parse a response from `self.reader`.
@@ -88,13 +80,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
         let headers = self.parse_headers(false).await?;
         let body = self.parse_body(Method::Post, &headers).await?.map(|b| Body::Bytes(b));
 
-        Ok(Response {
-            http_version,
-            status,
-            headers,
-            body,
-            chunked: false,
-        })
+        Ok(Response { http_version, status, headers, body, chunked: false })
     }
 
     async fn parse_request_line(&mut self) -> MessageParseResult<(Method, Uri, HttpVersion)> {
@@ -224,7 +210,7 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
     // any relevant headers (i.e. chunking and other transfer encodings).
     async fn parse_body(&mut self, method: Method, headers: &Headers) -> MessageParseResult<Option<Vec<u8>>> {
         Ok(if let Some(encodings) = headers.get(consts::H_TRANSFER_ENCODING) {
-            // I'm too lazy to support transfer encoding, beyond chunking. :^)
+            // I'm too lazy to support transfer encoding, beyond chunking. :)
             err_if!(encodings.iter().any(|e| e != consts::H_T_ENC_CHUNKED), UnsupportedTransferEncoding);
             Some(self.parse_chunked_body().await?.0)
         } else if let Some(length) = headers.get(consts::H_CONTENT_LENGTH) {
@@ -289,10 +275,10 @@ impl<R: BufRead + Unpin, W: Write + Unpin> MessageParser<R, W> {
 }
 
 // Attempts to execute `fut` with the default timeout.
-async fn with_timeout<F: Future<Output=io::Result<R>>, R>(fut: F) -> MessageParseResult<R> {
+async fn with_timeout<F: Future<Output = io::Result<R>>, R>(fut: F) -> MessageParseResult<R> {
     match io::timeout(consts::MAX_READ_TIMEOUT, fut).await {
         Ok(result) => Ok(result),
         Err(e) if e.kind() == io::ErrorKind::TimedOut => Err(MessageParseError::TimedOut),
-        _ => Err(MessageParseError::Unknown)
+        _ => Err(MessageParseError::Unknown),
     }
 }

@@ -1,6 +1,9 @@
 use std::fmt::{self, Formatter};
 
-use serde::{de::{self, Visitor}, Deserialize, Deserializer};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer,
+};
 
 use crate::server::template::Template;
 
@@ -11,7 +14,8 @@ pub struct RouteReplacement(pub Template);
 
 impl<'a> Deserialize<'a> for RouteReplacement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'a>
+    where
+        D: Deserializer<'a>,
     {
         deserializer.deserialize_str(RouteReplacementStringVisitor)
     }
@@ -27,10 +31,12 @@ impl<'a> Visitor<'a> for RouteReplacementStringVisitor {
     }
 
     fn visit_str<E>(self, str: &str) -> Result<Self::Value, E>
-        where E: de::Error
+    where
+        E: de::Error,
     {
         // Make sure the rule starts with a slash (i.e. specifies a route). `Template::new` does syntax checking.
-        str.starts_with('/').then(|| str)
+        str.starts_with('/')
+            .then(|| str)
             .and_then(|s| Template::new(s.to_string()))
             .map(|t| RouteReplacement(t))
             .ok_or(E::custom("expected route replacement"))

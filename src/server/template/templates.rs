@@ -28,10 +28,5 @@ impl Templates {
 
     // This always returns an unusable set of empty templates; this must only be used as a placeholder where it is
     // known that this value will never be used.
-    pub fn new_empty() -> Self {
-        Templates {
-            error: Template::new_empty(),
-            dir_listing: Template::new_empty(),
-        }
-    }
+    pub fn new_empty() -> Self { Templates { error: Template::new_empty(), dir_listing: Template::new_empty() } }
 }

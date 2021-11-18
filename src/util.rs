@@ -13,13 +13,9 @@ pub struct Range {
     pub high: usize,
 }
 
-pub fn get_time_utc() -> DateTime<Utc> {
-    SystemTime::now().into()
-}
+pub fn get_time_utc() -> DateTime<Utc> { SystemTime::now().into() }
 
-pub fn get_time_local() -> DateTime<Local> {
-    SystemTime::now().into()
-}
+pub fn get_time_local() -> DateTime<Local> { SystemTime::now().into() }
 
 // The following functions work with timestamps in the format used by HTTP (RFC 2616).
 
@@ -27,20 +23,17 @@ pub fn parse_time_rfc2616(time: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_str(time, "%a, %d %b %Y %T GMT").ok().map(|t| t.with_timezone(&Utc))
 }
 
-pub fn format_time_rfc2616(time: &DateTime<Utc>) -> String {
-    time.format("%a, %d %b %Y %T GMT").to_string()
-}
+pub fn format_time_rfc2616(time: &DateTime<Utc>) -> String { time.format("%a, %d %b %Y %T GMT").to_string() }
 
 // Visible characters ('vchar') as defined in RFC 7230.
-pub fn is_visible_char(ch: char) -> bool {
-    ('!'..='~').contains(&ch)
-}
+pub fn is_visible_char(ch: char) -> bool { ('!'..='~').contains(&ch) }
 
 // This iterates through the content of `reader` in chunks of a given size, calling `op` on each chunk. `op` may, for
 // example, send the chunk over a network.
 pub async fn with_chunks<R, F>(len: usize, reader: &mut R, mut op: F) -> io::Result<()>
-    where R: AsyncRead + Unpin,
-          F: FnMut(Vec<u8>) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    F: FnMut(Vec<u8>) -> io::Result<()>,
 {
     let chunk_count = (len - 1) / consts::READ_CHUNK_SIZE + 1;
     for n in 0..chunk_count {

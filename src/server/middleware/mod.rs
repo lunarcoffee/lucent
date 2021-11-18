@@ -33,15 +33,15 @@ pub enum MiddlewareOutput {
     // Respond with a non-OK status.
     Status(Status, bool),
 
-    // Like `Status`, but sends a formatted page (for statuses which should be seen by the client user, such as a 404).
-    // This is generated with the error template.
+    // Like `Status`, but sends a formatted page (for statuses which should be seen by the client user, such as a
+    // 404). This is generated with the error template.
     Error(Status, bool),
 
     // Respond with the given `Response`.
     Response(Response, bool),
 
-    // Respond with the given bytes. This is used when the server itself does not generate the content of the response,
-    // such as when an NPH script is executed.
+    // Respond with the given bytes. This is used when the server itself does not generate the content of the
+    // response, such as when an NPH script is executed.
     Bytes(Vec<u8>, bool),
 
     // Just close the connection.
@@ -50,11 +50,9 @@ pub enum MiddlewareOutput {
 
 // The structure of this module is loosely based around passing a request through a chain of 'middleware', until it
 // passes through the last middleware, or until an intermediate middleware returns an `Err`. The implementation is
-// very messy, though... I should refactor it sometime.
+// kinda messy, though... I should refactor it sometime.
 pub type MiddlewareResult<T> = Result<T, MiddlewareOutput>;
 
 impl<T: error::Error> From<T> for MiddlewareOutput {
-    fn from(_: T) -> Self {
-        MiddlewareOutput::Terminate
-    }
+    fn from(_: T) -> Self { MiddlewareOutput::Terminate }
 }

@@ -1,25 +1,36 @@
-use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
-use async_std::{fs::{File, Metadata}, io::{prelude::SeekExt, SeekFrom}, path::Path};
+use async_std::{
+    fs::{File, Metadata},
+    io::{prelude::SeekExt, SeekFrom},
+    path::Path,
+};
 use chrono::{DateTime, Utc};
 
 use crate::{
     consts,
-    http::{message::{Body, MessageBuilder}, request::{Method, Request}, response::{Response, Status}, uri::Uri},
+    http::{
+        message::{Body, MessageBuilder},
+        request::{Method, Request},
+        response::{Response, Status},
+        uri::Uri,
+    },
     log,
     server::{
-        config::{Config, route_replacement::RouteReplacement, route_spec::RouteSpec},
+        config::{route_replacement::RouteReplacement, route_spec::RouteSpec, Config},
         file_server::ConnInfo,
         middleware::{
             basic_auth::BasicAuthChecker,
             cgi_runner::CgiRunner,
             cond_checker::{CondInfo, ConditionalChecker},
             dir_lister::DirectoryLister,
-            MiddlewareOutput,
-            MiddlewareResult,
             range_parser::{RangeBody, RangeParser},
+            MiddlewareOutput, MiddlewareResult,
         },
-        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+        template::{templates::Templates, SubstitutionMap, TemplateSubstitution},
     },
     util,
 };
@@ -86,7 +97,8 @@ impl<'a> ResponseGenerator<'a> {
         let info = CondInfo::new(etag, last_modified);
         self.set_body(&info, &metadata).await?;
 
-        let response = self.response
+        let response = self
+            .response
             // Allow the client to make conditional requests.
             .with_header(consts::H_ETAG, &info.etag.unwrap())
             .with_header(consts::H_LAST_MODIFIED, &util::format_time_rfc2616(&info.last_modified.unwrap().into()))
@@ -96,11 +108,8 @@ impl<'a> ResponseGenerator<'a> {
         // Log the request. Show the original and routed targets if URL rewriting occurred, and also show whether basic
         // authentication was used.
         let host = self.request.headers.get_host().unwrap();
-        let reroute = if self.raw_target != self.routed_target {
-            format!(" -> {}", self.routed_target)
-        } else {
-            String::new()
-        };
+        let reroute =
+            if self.raw_target != self.routed_target { format!(" -> {}", self.routed_target) } else { String::new() };
         let auth = if required_auth { " (basic auth)" } else { "" };
         log::req(response.status, self.request.method, &self.raw_target, &(reroute + auth), host);
 
@@ -113,7 +122,9 @@ impl<'a> ResponseGenerator<'a> {
         // Only support GET and HEAD requests to static resources.
         if self.request.method != Method::Get && self.request.method != Method::Head {
             // Instead of immediately sending a 405, try allowing a CGI script to respond to this request.
-            return self.set_file_body(true, info).await
+            return self
+                .set_file_body(true, info)
+                .await
                 .and(Err(MiddlewareOutput::Status(Status::MethodNotAllowed, false)));
         }
 
@@ -122,7 +133,9 @@ impl<'a> ResponseGenerator<'a> {
             if self.config.dir_listing.enabled {
                 self.media_type = consts::H_MEDIA_HTML.to_string();
                 let listing = DirectoryLister::new(&self.routed_target, &self.target_file, self.templates, self.config)
-                    .get_listing_body().await?.into_bytes();
+                    .get_listing_body()
+                    .await?
+                    .into_bytes();
                 self.body = Body::Bytes(listing);
             } else {
                 // If directory listing is disabled, act as if no such resource exists.
@@ -151,7 +164,9 @@ impl<'a> ResponseGenerator<'a> {
 
             // Execute the script. If it exits successfully, the `MiddlewareOutput` with the result will propagate
             // upwards and be sent.
-            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph).script_response().await?;
+            CgiRunner::new(&target, &mut self.request, &self.conn_info, &self.config, is_nph)
+                .script_response()
+                .await?;
         }
 
         // Check conditional headers and set the body for non-script files.
@@ -174,7 +189,11 @@ impl<'a> ResponseGenerator<'a> {
 
     // Parse the ranges requested (if present) and modify the body accordingly.
     async fn set_range_body(&mut self) -> MiddlewareResult<()> {
-        match RangeParser::new(&self.request.headers, &mut self.body, &self.media_type).await.get_body().await {
+        match RangeParser::new(&self.request.headers, &mut self.body, &self.media_type)
+            .await
+            .get_body()
+            .await
+        {
             Err(output) => return Err(output),
             // A single byte range.
             Ok(RangeBody::Range(range, content_range)) => {
@@ -212,7 +231,7 @@ impl<'a> ResponseGenerator<'a> {
                 request.uri = uri;
                 format!("{}/{}", &config.file_root, request.uri.to_string_no_query())
             }
-            _ => format!("{}{}", &config.file_root, &routed_target)
+            _ => format!("{}{}", &config.file_root, &routed_target),
         };
         (raw_target, routed_target, target_file)
     }
@@ -225,14 +244,18 @@ impl<'a> ResponseGenerator<'a> {
             if let Some(capture) = rule_regex.captures(raw_target) {
                 // Create the `SubstitutionMap` for rewriting this URL. Start by going over the regex's captures and
                 // their corresponding placeholder names.
-                let sub = capture.iter().zip(rule_regex.capture_names())
+                let sub = capture
+                    .iter()
+                    .zip(rule_regex.capture_names())
                     // Skip the first one; that capture has the entire match.
                     .skip(1)
                     // For every capture, turn the corresponding placeholder name and value into an entry; i.e., use
                     // that captured value when substituting that placeholder.
-                    .flat_map(|(captures, name)| captures.into_iter()
-                        .map(move |c|
-                            (name.unwrap().to_string(), TemplateSubstitution::Single(c.as_str().to_string()))))
+                    .flat_map(|(captures, name)| {
+                        captures.into_iter().map(move |c| {
+                            (name.unwrap().to_string(), TemplateSubstitution::Single(c.as_str().to_string()))
+                        })
+                    })
                     .collect::<SubstitutionMap>();
 
                 // Find the end of the match; if this `RouteSpec` only matches a prefix, the remaining text should be

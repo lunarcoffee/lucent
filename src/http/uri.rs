@@ -1,8 +1,14 @@
-use std::{collections::HashMap, fmt::{self, Display, Formatter}};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+};
 
 use crate::{
     consts,
-    http::{parser::{MessageParseError, MessageParseResult}, request::Method},
+    http::{
+        parser::{MessageParseError, MessageParseResult},
+        request::Method,
+    },
     util,
 };
 
@@ -40,14 +46,13 @@ pub struct AbsolutePath {
 }
 
 impl AbsolutePath {
-    pub fn path_as_string(&self) -> String {
-        self.path.join("/")
-    }
+    pub fn path_as_string(&self) -> String { self.path.join("/") }
 
     // Returns the formatted query string.
     pub fn query_as_string(&self) -> String {
         match &self.query {
-            Query::ParamMap(map) => map.iter()
+            Query::ParamMap(map) => map
+                .iter()
                 .map(|(name, value)| format!("{}={}", name, value))
                 .collect::<Vec<_>>()
                 .join("&"),
@@ -69,7 +74,9 @@ impl Display for AbsolutePath {
 // A URI, in one of the four forms specified in RFC 7230 for use in HTTP requests.
 pub enum Uri {
     // Origin-form specifies only a path (i.e. 'GET /index.html'), with the host specified in the 'Host' header.
-    OriginForm { path: AbsolutePath },
+    OriginForm {
+        path: AbsolutePath,
+    },
 
     // Absolute-form specifies both host and path.
     AbsoluteForm {
@@ -79,7 +86,9 @@ pub enum Uri {
     },
 
     // Authority-form specifies only the authority, used only for CONNECT requests.
-    AuthorityForm { authority: Authority },
+    AuthorityForm {
+        authority: Authority,
+    },
 
     // Asterisk-form ('*') is used only for a server-wide OPTIONS request.
     AsteriskForm,
@@ -88,14 +97,11 @@ pub enum Uri {
 impl Uri {
     // Attempts to parse a URI from `raw`, validating method-specific restrictions (i.e. asterisk-form '*' is only for
     // CONNECT requests) with the given `method`.
-    pub fn from(method: &Method, raw: &str) -> MessageParseResult<Self> {
-        UriParser { method, raw }.parse()
-    }
+    pub fn from(method: &Method, raw: &str) -> MessageParseResult<Self> { UriParser { method, raw }.parse() }
 
     pub fn query(&self) -> &Query {
         match self {
-            Uri::OriginForm { path, .. } => &path.query,
-            Uri::AbsoluteForm { path, .. } => &path.query,
+            Uri::OriginForm { path, .. } | Uri::AbsoluteForm { path, .. } => &path.query,
             _ => &Query::None,
         }
     }
@@ -103,8 +109,9 @@ impl Uri {
     pub fn to_string_no_query(&self) -> String {
         match self {
             Uri::OriginForm { path } => format!("{}", path.path_as_string()),
-            Uri::AbsoluteForm { scheme, authority, path } =>
-                format!("{}://{}{}", scheme, authority, path.path_as_string()),
+            Uri::AbsoluteForm { scheme, authority, path } => {
+                format!("{}://{}{}", scheme, authority, path.path_as_string())
+            }
             _ => format!("{}", self),
         }
     }
@@ -129,7 +136,7 @@ macro_rules! err_if {
         if $cond {
             return Err(MessageParseError::InvalidUri);
         }
-    }
+    };
 }
 
 // This is a parser for a URI, parsing `raw` as if it came from an HTTP request with the given `method`.
@@ -264,27 +271,33 @@ impl UriParser<'_, '_> {
             Query::None
         } else if raw_query.contains('=') {
             // Split each query parameter pair, then split each pair into key and value.
-            let params = raw_query.split('&')
+            let params = raw_query
+                .split('&')
                 .map(|param| param.splitn(2, '=').collect::<Vec<&str>>())
                 .collect::<Vec<_>>();
 
             // Terminate if not all parameter pairs are of length two (i.e. if there was no '=' to split on), or if
             // there are invalid characters anywhere.
-            err_if!(!params.iter()
+            err_if!(!params
+                .iter()
                 .all(|p| p.len() == 2 && p[0].chars().all(is_query_char) && p[1].chars().all(is_query_char)));
 
             // Percent-decode the parameters.
-            let query = params.iter()
+            let query = params
+                .iter()
                 .map(|p| Some((decode_percent(p[0])?, decode_percent(p[1])?)))
                 .collect::<Option<HashMap<_, _>>>()
                 .ok_or(MessageParseError::InvalidUri)?;
+
             Query::ParamMap(query)
         } else {
             // Split into pieces and decode.
-            let params = raw_query.split('+')
+            let params = raw_query
+                .split('+')
                 .map(|term| decode_percent(term))
                 .collect::<Option<Vec<_>>>()
                 .ok_or(MessageParseError::InvalidUri)?;
+
             Query::SearchString(params)
         })
     }
@@ -294,17 +307,11 @@ impl UriParser<'_, '_> {
 // URI. These functions are predicates that determine if a character is in one of those sets (i.e. if it is allowed in
 // a certain part of a URI).
 
-fn is_query_char(ch: char) -> bool {
-    is_path_char(ch) || ch == '/' || ch == '?'
-}
+fn is_query_char(ch: char) -> bool { is_path_char(ch) || ch == '/' || ch == '?' }
 
-fn is_path_char(ch: char) -> bool {
-    is_user_info_char(ch) || ch == '@'
-}
+fn is_path_char(ch: char) -> bool { is_user_info_char(ch) || ch == '@' }
 
-fn is_user_info_char(ch: char) -> bool {
-    is_host_char(ch) || ch == ':'
-}
+fn is_user_info_char(ch: char) -> bool { is_host_char(ch) || ch == ':' }
 
 fn is_host_char(ch: char) -> bool {
     const HOST_CHARS: &str = "-._~%!$&'()*+,;=";

@@ -1,4 +1,8 @@
-use std::{fs::File, io::{Seek, SeekFrom}, str::FromStr};
+use std::{
+    fs::File,
+    io::{Seek, SeekFrom},
+    str::FromStr,
+};
 
 use async_std::{
     channel::{self, Receiver, Sender},
@@ -10,7 +14,7 @@ use async_std::{
     task,
 };
 use async_tls::TlsAcceptor;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, FutureExt, io::ErrorKind, select};
+use futures::{io::ErrorKind, select, AsyncRead, AsyncReadExt, AsyncWrite, FutureExt};
 use rustls::{internal::pemfile, NoClientAuth, ServerConfig};
 
 use crate::{
@@ -22,8 +26,8 @@ use crate::{
         middleware::{
             output_processor::OutputProcessor, request_verifier::RequestVerifier, response_gen::ResponseGenerator,
         },
-        Server,
         template::templates::Templates,
+        Server,
     },
 };
 
@@ -76,24 +80,30 @@ impl FileServer {
 
             // Compile and verify templates.
             let trimmed_template_root = config.template_root.strip_suffix('/').unwrap_or(&config.template_root);
-            let templates = Templates::new(trimmed_template_root).await.ok_or(FileServerStartError::InvalidTemplates)?;
+            let templates = Templates::new(trimmed_template_root)
+                .await
+                .ok_or(FileServerStartError::InvalidTemplates)?;
 
             Ok(VirtualServerInfo(config, templates))
         });
 
         // Load the configs concurrently.
-        let virtual_configs = futures::future::join_all(config_loading_futures).await.into_iter()
+        let virtual_configs = futures::future::join_all(config_loading_futures)
+            .await
+            .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
         let virtual_configs = Arc::new(virtual_configs);
 
         let (stop_sender, stop_receiver) = channel::bounded(1);
         let listener = match TcpListener::bind(&virtual_configs[0].0.address).await {
             Ok(listener) => listener,
-            Err(e) => return Err(match e.kind() {
-                ErrorKind::AddrInUse => FileServerStartError::AddressInUse,
-                ErrorKind::AddrNotAvailable => FileServerStartError::AddressUnavailable,
-                _ => FileServerStartError::CannotBindAddress,
-            }),
+            Err(e) => {
+                return Err(match e.kind() {
+                    ErrorKind::AddrInUse => FileServerStartError::AddressInUse,
+                    ErrorKind::AddrNotAvailable => FileServerStartError::AddressUnavailable,
+                    _ => FileServerStartError::CannotBindAddress,
+                })
+            }
         };
 
         let tls_acceptor = match &virtual_configs[0].0.tls {
@@ -110,11 +120,17 @@ impl FileServer {
                 let key = pemfile::rsa_private_keys(&mut key_file_reader)
                     .map_or(Err(()), |k| if k.is_empty() { Err(()) } else { Ok(k) })
                     // Seek back to the beginning of the file and try PKCS #8.
-                    .or_else(|_| key_file_reader.seek(SeekFrom::Start(0)).map_err(|_| ())
-                        .and_then(|_| pemfile::pkcs8_private_keys(&mut key_file_reader)))
+                    .or_else(|_| {
+                        key_file_reader
+                            .seek(SeekFrom::Start(0))
+                            .map_err(|_| ())
+                            .and_then(|_| pemfile::pkcs8_private_keys(&mut key_file_reader))
+                    })
                     .or(Err(FileServerStartError::TlsInvalidKey))?
                     // Take the first key.
-                    .into_iter().next().unwrap();
+                    .into_iter()
+                    .next()
+                    .unwrap();
 
                 // Configure TLS with the certificate and key.
                 let mut tls_config = ServerConfig::new(NoClientAuth::new());
@@ -157,7 +173,7 @@ impl FileServer {
         // Gather info, mostly for logging.
         let remote_addr = stream.peer_addr().unwrap_or(SocketAddr::from_str("0.0.0.0:80").unwrap());
         let local_addr = stream.local_addr().unwrap_or(SocketAddr::from_str("127.0.0.1:80").unwrap());
-        let conn_info = ConnInfo { remote_addr, local_addr };
+        let conn = ConnInfo { remote_addr, local_addr };
 
         type ReadStream = dyn AsyncRead + Unpin + Send;
         type WriteStream = dyn AsyncWrite + Unpin + Send;
@@ -187,25 +203,25 @@ impl FileServer {
         while !match RequestVerifier::new(&mut reader, &mut writer).verify_request().await {
             // Invalid request; this will respond appropriately and always return true (terminate the loop).
             Err(output) => OutputProcessor::new(&mut writer, &Templates::new_empty(), None).process(output).await,
-            Ok(mut request) => {
+            Ok(mut req) => {
                 // Determine the config to use for this request based on the 'Host' header.
-                let hostname = &request.headers.get_host().unwrap();
+                let hostname = &req.headers.get_host().unwrap();
                 let virtual_server = configs.iter().find(|c| c.0.hosts.iter().any(|h| h == "*" || &h == hostname));
 
                 match virtual_server {
                     Some(VirtualServerInfo(config, templates)) => {
                         // Generate a response for the request.
-                        let res = ResponseGenerator::new(&config, &templates, &mut request, &conn_info)
-                            .get_response().await;
-
-                        Self::client_intends_to_close(&request) || match res {
+                        let res = ResponseGenerator::new(&config, &templates, &mut req, &conn).get_response().await;
+                        let response_gen_failed = match res {
                             // An `Err` here means a response was generated (see `MiddlewareOutput`).
-                            Err(output) => OutputProcessor::new(&mut writer, &templates, Some(&request))
-                                .process(output)
-                                .await,
-                            // If a response failed to generate, terminate the loop.
+                            Err(output) => {
+                                OutputProcessor::new(&mut writer, &templates, Some(&req)).process(output).await
+                            }
                             _ => true,
-                        }
+                        };
+
+                        // The loop (and connection) terminates if this is true.
+                        Self::client_intends_to_close(&req) || response_gen_failed
                     }
                     // No config handling the request's hostname was found.
                     _ => false,

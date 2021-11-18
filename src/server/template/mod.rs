@@ -21,9 +21,9 @@ pub enum TemplatePart {
     Placeholder(PlaceholderName),
 
     // A placeholder which can take many values, each fitting the `Template` (which is substituted once for each
-    // value). Since each value is itself a template, it is possible to have arbitrarily deep templates. The syntax for
-    // this is '*', followed by the placeholder's name, then square brackets. Within the brackets is the template each
-    // value will be substituted into. See '/resources/templates/dir_listing.html' for an example.
+    // value). Since each value is itself a template, it is possible to have arbitrarily deep templates. The syntax
+    // for this is '*', followed by the placeholder's name, then square brackets. Within the brackets is the
+    // template each value will be substituted into. See '/resources/templates/dir_listing.html' for an example.
     MultiplePlaceholder(PlaceholderName, Template),
 }
 
@@ -36,7 +36,8 @@ pub enum TemplateSubstitution {
     // Just a string, used for the single placeholders.
     Single(String),
 
-    // Used for multi-value placeholders. Each of the values is itself a template (hence the use of `SubstitutionMap`).
+    // Used for multi-value placeholders. Each of the values is itself a template (hence the use of
+    // `SubstitutionMap`).
     Multiple(Vec<SubstitutionMap>),
 }
 
@@ -48,13 +49,9 @@ pub struct Template {
 
 impl Template {
     // Attempts to parse a template from a file.
-    pub fn new(file: String) -> Option<Self> {
-        TemplateParser::new(file).parse()
-    }
+    pub fn new(file: String) -> Option<Self> { TemplateParser::new(file).parse() }
 
-    pub fn new_empty() -> Self {
-        Template { parts: vec![] }
-    }
+    pub fn new_empty() -> Self { Template { parts: vec![] } }
 
     // Attempts to substitute values from `placeholders` into this template.
     pub fn substitute(&self, placeholders: &SubstitutionMap) -> Option<String> {
@@ -74,9 +71,11 @@ impl Template {
                 // Substitute multiple values (recursively) only if a placeholder with that name exists in the
                 // template, and if it is a multi-value placeholder.
                 TemplatePart::MultiplePlaceholder(name, template) => match placeholders.get(name) {
-                    Some(TemplateSubstitution::Multiple(maps)) => for map in maps {
-                        output.push_str(&template.substitute(map)?);
-                    },
+                    Some(TemplateSubstitution::Multiple(maps)) => {
+                        for map in maps {
+                            output.push_str(&template.substitute(map)?);
+                        }
+                    }
                     _ => return None,
                 },
             };

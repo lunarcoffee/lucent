@@ -2,11 +2,15 @@ use async_std::io::{self, prelude::WriteExt, Write};
 
 use crate::{
     consts,
-    http::{message::{Body, MessageBuilder}, request::{Method, Request}, response::{Response, Status}},
+    http::{
+        message::{Body, MessageBuilder},
+        request::{Method, Request},
+        response::{Response, Status},
+    },
     log,
     server::{
         middleware::MiddlewareOutput,
-        template::{SubstitutionMap, templates::Templates, TemplateSubstitution},
+        template::{templates::Templates, SubstitutionMap, TemplateSubstitution},
     },
 };
 
@@ -48,6 +52,7 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         if close {
             response.set_header(consts::H_CONNECTION, consts::H_CONN_CLOSE)
         }
+        
         response
             .with_status(status)
             .with_header_multi(consts::H_ACCEPT, vec![&Method::Get.to_string(), &Method::Head.to_string()])
@@ -55,7 +60,8 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
             .build()
             .send(self.writer)
             .await
-            .is_err() || close
+            .is_err()
+            || close
     }
 
     // Responds with a request of the given `status` with no body.
@@ -79,7 +85,10 @@ impl<'a, W: Write + Unpin> OutputProcessor<'a, W> {
         io::timeout(consts::MAX_WRITE_TIMEOUT, async {
             self.writer.write_all(&bytes).await?;
             self.writer.flush().await
-        }).await.is_err() || close
+        })
+        .await
+        .is_err()
+            || close
     }
 
     // Logs the request status, along with the request's method and target if available.

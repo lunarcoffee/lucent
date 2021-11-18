@@ -1,6 +1,9 @@
 use std::fmt::{self, Formatter};
 
-use serde::{de::{Error, MapAccess, Visitor}, Deserialize, Deserializer};
+use serde::{
+    de::{Error, MapAccess, Visitor},
+    Deserialize, Deserializer,
+};
 
 use crate::server::config::route_spec::RouteSpec;
 
@@ -23,7 +26,8 @@ pub struct RealmInfo {
 
 impl<'a> Deserialize<'a> for RealmInfo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'a>
+    where
+        D: Deserializer<'a>,
     {
         deserializer.deserialize_map(RealmInfoStringVisitor)
     }
@@ -39,19 +43,23 @@ impl<'a> Visitor<'a> for RealmInfoStringVisitor {
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where A: MapAccess<'a>
+    where
+        A: MapAccess<'a>,
     {
         // Parse the list of credentials (see '/resources/config.yaml'), ensuring that the key in the map entry is
         // correctly named.
-        let credentials = map.next_entry::<String, Vec<String>>()?
+        let credentials = map
+            .next_entry::<String, Vec<String>>()?
             .filter(|(key, _)| key == "credentials")
             .and_then(|(_, raw)| raw.into_iter().map(parse_credentials).collect::<Option<Vec<_>>>())
             .ok_or(A::Error::custom("expected credentials"))?;
 
         // Parse the list of routes, ensuring that the key in the map entry is correctly named.
-        let routes = map.next_entry::<String, Vec<RouteSpec>>()?
+        let routes = map
+            .next_entry::<String, Vec<RouteSpec>>()?
             .filter(|(key, _)| key == "routes")
-            .ok_or(A::Error::custom("expected routes"))?.1;
+            .ok_or(A::Error::custom("expected routes"))?
+            .1;
 
         Ok(RealmInfo { credentials, routes })
     }

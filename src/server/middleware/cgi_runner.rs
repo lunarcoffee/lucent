@@ -1,12 +1,24 @@
-use std::{io::Write, process::{Command, Stdio}};
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use async_std::{io, path::Path, process::Output};
 
 use crate::{
     consts,
-    http::{message::{Body, Message}, request::{HttpVersion, Request}, response::{Response, Status}, uri::{Query, Uri}},
+    http::{
+        message::{Body, Message},
+        request::{HttpVersion, Request},
+        response::{Response, Status},
+        uri::{Query, Uri},
+    },
     log,
-    server::{config::Config, file_server::ConnInfo, middleware::{MiddlewareOutput, MiddlewareResult}},
+    server::{
+        config::Config,
+        file_server::ConnInfo,
+        middleware::{MiddlewareOutput, MiddlewareResult},
+    },
     util,
 };
 
@@ -16,12 +28,23 @@ pub const VAR_EXCLUDED_HEADERS: &[&str] = &[consts::H_CONTENT_LENGTH, consts::H_
 // Request and server info which is passed to a CGI script as environment variables. Most of these aren't from the
 // request's headers; those are also passed in, save for the ones defined above.
 pub const CGI_VARS: &[&str] = &[
-    consts::CGI_VAR_AUTH_TYPE, consts::CGI_VAR_CONTENT_LENGTH, consts::CGI_VAR_CONTENT_TYPE,
-    consts::CGI_VAR_GATEWAY_INTERFACE, consts::CGI_VAR_PATH_INFO, consts::CGI_VAR_PATH_TRANSLATED,
-    consts::CGI_VAR_QUERY_STRING, consts::CGI_VAR_REMOTE_ADDR, consts::CGI_VAR_REMOTE_HOST,
-    consts::CGI_VAR_REMOTE_IDENT, consts::CGI_VAR_REMOTE_USER, consts::CGI_VAR_REQUEST_METHOD,
-    consts::CGI_VAR_SCRIPT_NAME, consts::CGI_VAR_SERVER_NAME, consts::CGI_VAR_SERVER_PORT,
-    consts::CGI_VAR_SERVER_PROTOCOL, consts::CGI_VAR_SERVER_SOFTWARE,
+    consts::CGI_VAR_AUTH_TYPE,
+    consts::CGI_VAR_CONTENT_LENGTH,
+    consts::CGI_VAR_CONTENT_TYPE,
+    consts::CGI_VAR_GATEWAY_INTERFACE,
+    consts::CGI_VAR_PATH_INFO,
+    consts::CGI_VAR_PATH_TRANSLATED,
+    consts::CGI_VAR_QUERY_STRING,
+    consts::CGI_VAR_REMOTE_ADDR,
+    consts::CGI_VAR_REMOTE_HOST,
+    consts::CGI_VAR_REMOTE_IDENT,
+    consts::CGI_VAR_REMOTE_USER,
+    consts::CGI_VAR_REQUEST_METHOD,
+    consts::CGI_VAR_SCRIPT_NAME,
+    consts::CGI_VAR_SERVER_NAME,
+    consts::CGI_VAR_SERVER_PORT,
+    consts::CGI_VAR_SERVER_PROTOCOL,
+    consts::CGI_VAR_SERVER_SOFTWARE,
 ];
 
 // Runs the script at `script_path`, using information in the `request` and from the connection. If the script is an
@@ -36,13 +59,7 @@ pub struct CgiRunner<'a> {
 
 impl<'a> CgiRunner<'a> {
     pub fn new(path: &'a str, request: &'a mut Request, conn: &'a ConnInfo, config: &'a Config, is_nph: bool) -> Self {
-        CgiRunner {
-            script_path: path,
-            request,
-            conn_info: conn,
-            config,
-            is_nph,
-        }
+        CgiRunner { script_path: path, request, conn_info: conn, config, is_nph }
     }
 
     // Attempt to run a CGI script, returning its output if successful and an error status otherwise.
@@ -100,13 +117,27 @@ impl<'a> CgiRunner<'a> {
 
         // Prepare values to pass into the script's environment. Each element corresponds to `CGI_VARS`.
         let cgi_var_values = &[
-            "", &self.header_or_empty(consts::H_CONTENT_LENGTH), &self.header_or_empty(consts::H_CONTENT_TYPE),
-            "CGI/1.1", uri_no_file, uri_no_file, &query_string, &remote_addr, &remote_addr, "", "",
-            &self.request.method.to_string(), &uri, &local_addr, &self.conn_info.local_addr.port().to_string(),
-            &HttpVersion::Http11.to_string(), consts::SERVER_NAME_VERSION,
+            "",
+            &self.header_or_empty(consts::H_CONTENT_LENGTH),
+            &self.header_or_empty(consts::H_CONTENT_TYPE),
+            "CGI/1.1",
+            uri_no_file,
+            uri_no_file,
+            &query_string,
+            &remote_addr,
+            &remote_addr,
+            "",
+            "",
+            &self.request.method.to_string(),
+            &uri,
+            &local_addr,
+            &self.conn_info.local_addr.port().to_string(),
+            &HttpVersion::Http11.to_string(),
+            consts::SERVER_NAME_VERSION,
         ];
 
-        let command = self.command_by_extension()
+        let command = self
+            .command_by_extension()
             .map_err(|ext| log::warn(format!("no CGI script executor found for file extension `.{}`", ext)))
             .ok()?;
 
@@ -151,7 +182,6 @@ impl<'a> CgiRunner<'a> {
         script.wait_with_output().map_err(|_| log::warn("could not execute CGI script")).ok()
     }
 
-
     // Try getting a header's value from the request, returning a empty string if the request doesn't have the header.
     fn header_or_empty(&self, name: &str) -> String {
         self.request.headers.get(name).map(|header| &header[0]).cloned().unwrap_or(String::new())
@@ -160,7 +190,8 @@ impl<'a> CgiRunner<'a> {
     // Replace newlines ('\n') in the sections before the body with CRLFs.
     fn replace_crlf_nl(res: Vec<u8>) -> Vec<u8> {
         let body_index = res.windows(2).position(|a| a[0] == b'\n' && a[1] == b'\n').unwrap_or(res.len() - 2) + 2;
-        let mut fixed = res[..body_index].iter()
+        let mut fixed = res[..body_index]
+            .iter()
             .flat_map(|b| if *b == b'\n' { vec![b'\r', b'\n'] } else { vec![*b] })
             .collect::<Vec<_>>();
 

@@ -2,7 +2,7 @@
 name = "lucent"
 version = "1.4.0"
 authors = ["LunarCoffee <lunarcoffee2@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }

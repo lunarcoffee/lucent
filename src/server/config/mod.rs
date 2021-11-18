@@ -10,8 +10,8 @@ use crate::server::config::{realm_info::RealmInfo, route_replacement::RouteRepla
 pub mod realm_info;
 
 // Same stuff as above, but for URL rewriting.
-pub mod route_spec;
 pub mod route_replacement;
+pub mod route_spec;
 
 // Options from the config file (see '/resources/config_*.yaml').
 #[derive(Clone, Deserialize)]

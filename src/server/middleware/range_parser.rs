@@ -1,4 +1,4 @@
-use async_std::io::{ErrorKind, prelude::ReadExt};
+use async_std::io::{prelude::ReadExt, ErrorKind};
 
 use crate::{
     consts,
@@ -30,12 +30,7 @@ pub struct RangeParser<'a> {
 impl<'a> RangeParser<'a> {
     pub async fn new(headers: &'a Headers, body: &'a mut Body, media_type: &'a str) -> RangeParser<'a> {
         let body_len = body.len().await;
-        RangeParser {
-            headers,
-            body,
-            body_len,
-            media_type,
-        }
+        RangeParser { headers, body, body_len, media_type }
     }
 
     // Attempts to parse the 'Range' header and return the corresponding `RangeBody`.
@@ -93,7 +88,11 @@ impl<'a> RangeParser<'a> {
         };
 
         // Make sure the range is valid.
-        if range.high <= self.body_len { Some(range) } else { None }
+        if range.high <= self.body_len {
+            Some(range)
+        } else {
+            None
+        }
     }
 
     // Generate a multipart body for the specified ranges. This is fairly inefficient, as it stores the entire body in
@@ -118,11 +117,16 @@ impl<'a> RangeParser<'a> {
         for range in ranges {
             // Add the part's boundary and some headers.
             new_body.extend_from_slice(format!("--{}\r\n", sep).as_bytes());
-            new_body.extend_from_slice(format!(
-                "{}: {}\r\n{}: {}\r\n\r\n",
-                consts::H_CONTENT_TYPE, self.media_type,
-                consts::H_CONTENT_RANGE, self.get_content_range(&range)
-            ).as_bytes());
+            new_body.extend_from_slice(
+                format!(
+                    "{}: {}\r\n{}: {}\r\n\r\n",
+                    consts::H_CONTENT_TYPE,
+                    self.media_type,
+                    consts::H_CONTENT_RANGE,
+                    self.get_content_range(&range)
+                )
+                .as_bytes(),
+            );
 
             // Add the actual content of the range.
             new_body.extend_from_slice(&body[range.low..range.high]);

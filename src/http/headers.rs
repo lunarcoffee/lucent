@@ -1,11 +1,21 @@
-use std::{collections::HashMap, fmt::{self, Debug, Formatter}};
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug, Formatter},
+};
 
 use crate::{consts, util};
 
 // Headers names which may contain more than one value.
 const MULTI_VALUE_HEADER_NAMES: &[&str] = &[
-    consts::H_ACCEPT, consts::H_ACCEPT_CHARSET, consts::H_ACCEPT_ENCODING, consts::H_ACCEPT_LANGUAGE,
-    consts::H_CACHE_CONTROL, consts::H_TE, consts::H_TRANSFER_ENCODING, consts::H_UPGRADE, consts::H_VIA,
+    consts::H_ACCEPT,
+    consts::H_ACCEPT_CHARSET,
+    consts::H_ACCEPT_ENCODING,
+    consts::H_ACCEPT_LANGUAGE,
+    consts::H_CACHE_CONTROL,
+    consts::H_TE,
+    consts::H_TRANSFER_ENCODING,
+    consts::H_UPGRADE,
+    consts::H_VIA,
 ];
 
 type HeaderMap = HashMap<String, Vec<String>>;
@@ -16,25 +26,15 @@ pub struct Headers {
 }
 
 impl Headers {
-    pub fn from(headers: HeaderMap) -> Self {
-        Headers { headers }
-    }
+    pub fn from(headers: HeaderMap) -> Self { Headers { headers } }
 
-    pub fn get(&self, name: &str) -> Option<&Vec<String>> {
-        self.headers.get(&Self::normalize_header_name(name))
-    }
+    pub fn get(&self, name: &str) -> Option<&Vec<String>> { self.headers.get(&Self::normalize_header_name(name)) }
 
-    pub fn get_host(&self) -> Option<&String> {
-        self.get(consts::H_HOST).map(|h| h.into_iter().next().unwrap())
-    }
+    pub fn get_host(&self) -> Option<&String> { self.get(consts::H_HOST).map(|h| h.into_iter().next().unwrap()) }
 
-    pub fn get_all(&self) -> &HeaderMap {
-        &self.headers
-    }
+    pub fn get_all(&self) -> &HeaderMap { &self.headers }
 
-    pub fn contains(&self, name: &str) -> bool {
-        matches!(self.get(name), Some(_))
-    }
+    pub fn contains(&self, name: &str) -> bool { matches!(self.get(name), Some(_)) }
 
     // Assigns a value to a header, checking to see if the characters in the name and value are valid.
     pub fn set_one(&mut self, name: &str, value: &str) -> bool {
@@ -57,18 +57,14 @@ impl Headers {
         }
     }
 
-    pub fn remove(&mut self, name: &str) {
-        self.headers.remove(name);
-    }
+    pub fn remove(&mut self, name: &str) { self.headers.remove(name); }
 
     pub fn is_multi_value(name: &str) -> bool {
         MULTI_VALUE_HEADER_NAMES.contains(&&*Self::normalize_header_name(name))
     }
 
     // Header names are not case-sensitive, so making them lowercase is valid and helps for comparisons.
-    fn normalize_header_name(name: &str) -> String {
-        name.to_ascii_lowercase()
-    }
+    fn normalize_header_name(name: &str) -> String { name.to_ascii_lowercase() }
 
     // The standard defines the set of characters a header value may contain.
     fn is_valid_header_value(str: &&str) -> bool {
@@ -78,20 +74,19 @@ impl Headers {
 
 impl Debug for Headers {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let headers_joined = self.headers.iter()
+        let headers_joined = self
+            .headers
+            .iter()
             .map(|h| format!("{}: {}", h.0, h.1.join(", ")))
             .collect::<Vec<_>>()
             .join("\n");
+
         write!(f, "{}", headers_joined)
     }
 }
 
 const TOKEN_CHARS: &str = "!#$%&'*+-.^_`|~";
 
-fn is_token_char(ch: char) -> bool {
-    TOKEN_CHARS.contains(ch) || ch.is_ascii_alphanumeric()
-}
+fn is_token_char(ch: char) -> bool { TOKEN_CHARS.contains(ch) || ch.is_ascii_alphanumeric() }
 
-fn is_token_string(str: &str) -> bool {
-    str.chars().all(is_token_char)
-}
+fn is_token_string(str: &str) -> bool { str.chars().all(is_token_char) }

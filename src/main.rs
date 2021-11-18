@@ -6,7 +6,11 @@ use std::env;
 
 use async_std::{process, sync::Arc};
 
-use crate::server::{config::Config, file_server::{FileServer, FileServerStartError::*}, Server};
+use crate::server::{
+    config::Config,
+    file_server::{FileServer, FileServerStartError::*},
+    Server,
+};
 
 mod consts;
 mod http;
@@ -27,7 +31,9 @@ async fn main() {
 
     // Load all configs concurrently, stopping if any fail to be loaded.
     let config_futures = args.skip(1).into_iter().map(|path| Config::load(path));
-    let configs = futures::future::join_all(config_futures).await.into_iter()
+    let configs = futures::future::join_all(config_futures)
+        .await
+        .into_iter()
         .collect::<Option<_>>()
         .unwrap_or_else(|| log::fatal("a configuration file was invalid or omitted required options"));
 

@@ -2,10 +2,17 @@ use pwhash::bcrypt;
 
 use crate::{
     consts,
-    http::{message::MessageBuilder, request::Request, response::{Response, Status}},
+    http::{
+        message::MessageBuilder,
+        request::Request,
+        response::{Response, Status},
+    },
     log,
     server::{
-        config::{Config, realm_info::{Credentials, RealmInfo}},
+        config::{
+            realm_info::{Credentials, RealmInfo},
+            Config,
+        },
         middleware::{MiddlewareOutput, MiddlewareResult},
     },
 };
@@ -17,9 +24,7 @@ pub struct BasicAuthChecker<'a> {
 }
 
 impl<'a> BasicAuthChecker<'a> {
-    pub fn new(request: &'a Request, config: &'a Config) -> Self {
-        BasicAuthChecker { request, config }
-    }
+    pub fn new(request: &'a Request, config: &'a Config) -> Self { BasicAuthChecker { request, config } }
 
     // Checks if authentication is required, sending a 401 with a challenge if necessary.
     pub fn check(&self) -> MiddlewareResult<bool> {
@@ -48,7 +53,6 @@ impl<'a> BasicAuthChecker<'a> {
         realm: &str,
         realm_credentials: &Vec<Credentials>,
     ) -> MiddlewareResult<bool> {
-
         // Attempt to parse the 'Authorization' header, ensuring the client is using basic authentication.
         let auth = auth[0].splitn(2, ' ').collect::<Vec<_>>();
         if auth.len() > 1 && auth[0].eq_ignore_ascii_case(consts::H_AUTH_BASIC) {
@@ -84,6 +88,7 @@ impl<'a> BasicAuthChecker<'a> {
             .with_status(Status::Unauthorized)
             .with_header(consts::H_WWW_AUTHENTICATE, &auth)
             .build();
+
         Err(MiddlewareOutput::Response(response, false))
     }
 }

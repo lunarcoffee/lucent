@@ -1,7 +1,13 @@
-use std::{fmt::{self, Formatter}, hash::{Hash, Hasher}};
+use std::{
+    fmt::{self, Formatter},
+    hash::{Hash, Hasher},
+};
 
 use regex::Regex;
-use serde::{de::{self, Visitor}, Deserialize, Deserializer};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer,
+};
 
 // A rule which matches against routes. The syntax is just like a route, except you may capture parts of the route as
 // variables (even conditionally, with regex). These can then be used in the corresponding `RouteReplacement`.
@@ -11,22 +17,19 @@ pub struct RouteSpec(pub Regex);
 // The following three impls allow `RouteSpec` to be used as a key in a hashmap.
 
 impl Hash for RouteSpec {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write(self.0.as_str().as_bytes());
-    }
+    fn hash<H: Hasher>(&self, state: &mut H) { state.write(self.0.as_str().as_bytes()); }
 }
 
 impl Eq for RouteSpec {}
 
 impl PartialEq for RouteSpec {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_str() == other.0.as_str()
-    }
+    fn eq(&self, other: &Self) -> bool { self.0.as_str() == other.0.as_str() }
 }
 
 impl<'a> Deserialize<'a> for RouteSpec {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'a>
+    where
+        D: Deserializer<'a>,
     {
         deserializer.deserialize_str(RouteSpecStringVisitor)
     }
@@ -42,7 +45,8 @@ impl<'a> Visitor<'a> for RouteSpecStringVisitor {
     }
 
     fn visit_str<E>(self, str: &str) -> Result<Self::Value, E>
-        where E: de::Error
+    where
+        E: de::Error,
     {
         // Rules starting with '@' only match exactly the route they specify, while rules starting with '/' match any
         // route which has a prefix matching the rule.
@@ -101,16 +105,23 @@ fn isolate_var_captures(route: &str) -> Vec<String> {
         // this maintains the invariant of `is_var` as specified in the comment earlier, with the exception that the
         // terminating '}' is not considered part of a capture.
         if !prev_is_escape {
-            is_var = if c == '{' { true } else if c == '}' && is_var { false } else { is_var };
+            is_var = if c == '{' {
+                true
+            } else if c == '}' && is_var {
+                false
+            } else {
+                is_var
+            };
         }
         prev_is_escape = !prev_is_escape && c == '\\';
 
         // Don't include escape characters in the final output.
-        if prev_is_escape { None } else { Some((c, is_var)) }
+        (!prev_is_escape).then(|| (c, is_var))
     });
 
     // Combine adjacent characters into strings, based on whether they are in a capture or not.
-    mapped.collect::<Vec<_>>()
+    mapped
+        .collect::<Vec<_>>()
         .group_by(|a, b| a.1 == b.1)
         .map(|g| g.into_iter().map(|(c, _)| c).collect())
         .collect()
